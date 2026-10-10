@@ -1,0 +1,12 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vaillant eBUS (ebusd)",
+        "data": { "host": "Host / IP des ebusd", "port": "TCP-Port" }
+      }
+    },
+    "error": { "cannot_connect": "Keine Verbindung zu ebusd" },
+    "abort": { "already_configured": "Bereits eingerichtet" }
+  }
+}
