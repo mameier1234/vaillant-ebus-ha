@@ -14,6 +14,7 @@ const E = {
   brennerH: V + "brennerlaufzeit", brennerS: V + "brennerstarts_heizen",
   brenner: B + "brenner", hkPumpe: B + "heizkreispumpe", ladePumpe: B + "ladepumpe_puffer",
   zirk: B + "zirkulationspumpe", tank: "sensor.heizoel_tanklevel",
+  betrieb: "select.vaillant_heizung_betriebsart",
 };
 const OR = "#ff9800", RD = "#ff7043", GR = "#4caf50";
 
@@ -34,6 +35,8 @@ class VaillantSchemaCard extends HTMLElement {
       this.shadowRoot.innerHTML =
         "<style>:host{display:block}ha-card{padding:8px 12px}#c{max-width:var(--vsc-max,720px);margin:0 auto}svg{width:100%;height:auto;display:block}.hot{cursor:pointer}</style><ha-card><div id='c'></div></ha-card>";
       this.shadowRoot.addEventListener("click", (ev) => {
+        const m = ev.target.closest && ev.target.closest("[data-set]");
+        if (m) { this._setMode(m.dataset.set); return; }
         const t = ev.target.closest && ev.target.closest("[data-entity]");
         if (!t) return;
         this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: t.dataset.entity } }));
@@ -56,6 +59,28 @@ class VaillantSchemaCard extends HTMLElement {
     if (l === "desktop") return false;
     const w = this.getBoundingClientRect().width;
     return w > 0 && w < this._bp;
+  }
+  _setMode(opt) {
+    const st = this._hass && this._hass.states[E.betrieb];
+    if (!st || st.state === opt) return;
+    const msg = opt === "summer" ? "Heizung auf SOMMER stellen? (Heizung aus, nur Warmwasser)" : "Heizung auf WINTER stellen? (Heizung Automatik)";
+    if (!window.confirm(msg)) return;
+    this._hass.callService("select", "select_option", { entity_id: E.betrieb, option: opt });
+  }
+  _pill(x, y, w, h) {
+    const st = this._hass.states[E.betrieb];
+    const cur = st && st.state;
+    const half = w / 2;
+    const seg = (i, opt, label, col) => {
+      const act = cur === opt;
+      return `<rect x='${x + i * half + 2}' y='${y + 2}' width='${half - 4}' height='${h - 4}' rx='${(h - 4) / 2}' fill='${act ? col : "transparent"}'/>`
+        + `<text x='${x + i * half + half / 2}' y='${y + h / 2}' class='${act ? "pa" : "pn"}' text-anchor='middle' dominant-baseline='central'>${label}</text>`
+        + `<rect class='hot' data-set='${opt}' x='${x + i * half}' y='${y}' width='${half}' height='${h}' fill='transparent'><title>Heizung auf ${label} stellen</title></rect>`;
+    };
+    const bad = cur !== "winter" && cur !== "summer";
+    return `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='${h / 2}' fill='var(--secondary-background-color)' stroke='var(--divider-color)'/>`
+      + seg(0, "winter", "Winter", "#ff7043") + seg(1, "summer", "Sommer", "#ffc107")
+      + (bad ? `<text x='${x + w + 8}' y='${y + h / 2}' class='s' dominant-baseline='central'>${cur || "?"}</text>` : "");
   }
   getCardSize() { return 9; }
   static getStubConfig() { return {}; }
@@ -88,8 +113,10 @@ class VaillantSchemaCard extends HTMLElement {
     const { N, F, I, ON, RUN, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='290' y='${y}' width='110' height='80' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(345, y + 30, F(t) + " °C", "z") + tx(345, y + 52, l, "zs") + hot(290, y, 110, 80, ent); };
 
-    return `<svg viewBox='0 0 680 520' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+    return `<svg viewBox='0 0 680 556' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+${this._pill(50, 4, 190, 28)}<text x='252' y='18' class='s' dominant-baseline='central'>Betriebsart Heizung</text>
+<g transform='translate(0,36)'>
 <g fill='none'>
 <line x1='95' y1='150' x2='95' y2='133' ${P(pS, OR)}/><line x1='95' y1='115' x2='95' y2='82' ${P(pS, OR)}/><line x1='155' y1='82' x2='155' y2='150' ${P(pS, OR)}/>
 <line x1='200' y1='165' x2='236' y2='165' ${P(pW, OR)}/><line x1='254' y1='165' x2='290' y2='165' ${P(pW, OR)}/><line x1='290' y1='185' x2='200' y2='185' ${P(pW, OR)}/>
@@ -115,13 +142,16 @@ ${box(40, 430, 190, 48)}${tx(135, 447, "Wasserdruck", "s")}${tx(135, 466, F(N(E.
 ${box(245, 430, 190, 48)}${tx(340, 447, "Heizöl-Tank", "s")}${tx(340, 466, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(245, 430, 190, 48, E.tank)}
 ${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " Starts", "t")}${hot(450, 430, 190, 48, E.brennerH)}
 <text x='40' y='505' class='s'>Grün: Pumpe läuft · Leitungen animiert bei laufender Pumpe · Puffer: blau kühl bis rot warm · Antippen für den Verlauf</text>
+</g>
 </svg>`;
   }
   _svgMobile() {
     const { N, F, I, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='10' y='${y}' width='130' height='60' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(75, y + 22, F(t) + " °C", "z") + tx(75, y + 42, l, "zs") + hot(10, y, 130, 60, ent); };
-    return `<svg viewBox='0 0 360 565' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+    return `<svg viewBox='0 0 360 609' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+${this._pill(10, 6, 340, 30)}
+<g transform='translate(0,46)'>
 <g fill='none'>
 <line x1='95' y1='54' x2='95' y2='74' ${P(pS, OR)}/>
 <line x1='95' y1='118' x2='95' y2='150' ${P(pW, OR)}/>
@@ -146,6 +176,7 @@ ${box(190, 436, 160, 46)}${tx(270, 452, "Außen", "s")}${tx(270, 470, F(N(E.auss
 ${box(10, 490, 170, 46)}${tx(95, 506, "Heizöl-Tank", "s")}${tx(95, 524, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(10, 490, 170, 46, E.tank)}
 ${box(190, 490, 160, 46)}${tx(270, 506, "Brenner Heizen", "s")}${tx(270, 524, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " St.", "t")}${hot(190, 490, 160, 46, E.brennerH)}
 <text x='10' y='555' class='s'>Grün: Pumpe läuft · Puffer: blau kühl bis rot warm</text>
+</g>
 </svg>`;
   }
 }
