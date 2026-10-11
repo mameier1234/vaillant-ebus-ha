@@ -12,6 +12,8 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import VaillantConfigEntry
 from .ebusd import EbusdError
 from .entity import VaillantEntity
+from .schedule_editor import ScheduleDaySelect
+from .spec import TIMER_CIRCUITS
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,9 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     async_add_entities(VaillantModeSelect(coordinator, entry.entry_id, m) for m in MODES)
+    async_add_entities(
+        ScheduleDaySelect(coordinator, entry.entry_id, c, n) for c, n in TIMER_CIRCUITS.items()
+    )
 
 
 class VaillantModeSelect(VaillantEntity, SelectEntity):

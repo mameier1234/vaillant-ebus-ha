@@ -24,6 +24,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.SWITCH,
     Platform.BUTTON,
+    Platform.TEXT,
 ]
 
 TIME_RE = vol.Match(r"^([01]\d|2[0-3]):[0-5]\d$")

@@ -141,3 +141,37 @@ def timer_slots(tokens: list[str]) -> list[tuple[str, str]]:
         if i + 1 < len(tokens) and tokens[i] != "-:-" and tokens[i + 1] != "-:-":
             slots.append((tokens[i], tokens[i + 1]))
     return slots
+
+
+# --- Zeitprogramm-Editor ----------------------------------------------------------------
+# Auswahl "Tag" -> betroffene Wochentage (None = heute)
+DAY_OPTIONS: dict[str, tuple[str, ...] | None] = {
+    "Heute": None,
+    "Mo": ("Monday",), "Di": ("Tuesday",), "Mi": ("Wednesday",), "Do": ("Thursday",),
+    "Fr": ("Friday",), "Sa": ("Saturday",), "So": ("Sunday",),
+    "Mo–Fr": DAYS[:5],
+    "Sa–So": DAYS[5:],
+}
+
+
+def format_slots(slots: list[tuple[str, str]]) -> str:
+    return ", ".join(f"{a}-{b}" for a, b in slots) if slots else "aus"
+
+
+def parse_slots(text: str) -> list[tuple[str, str]]:
+    """'5:10-11:00, 12:00–21:30' -> [('05:10','11:00'), ('12:00','21:30')]; 'aus'/'' -> []."""
+    import re
+
+    text = text.strip().lower()
+    if text in ("", "aus", "-", "off"):
+        return []
+    slots = []
+    for part in text.split(","):
+        m = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*", part)
+        if not m:
+            raise ValueError(f"Ungültiges Zeitfenster: {part.strip()!r} (Format HH:MM-HH:MM)")
+        h1, m1, h2, m2 = (int(x) for x in m.groups())
+        if h1 > 23 or h2 > 24 or m1 > 59 or m2 > 59 or (h2 == 24 and m2):
+            raise ValueError(f"Ungültige Uhrzeit in {part.strip()!r}")
+        slots.append((f"{h1:02d}:{m1:02d}", f"{h2:02d}:{m2:02d}"))
+    return slots

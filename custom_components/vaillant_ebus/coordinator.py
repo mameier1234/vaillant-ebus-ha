@@ -56,6 +56,7 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._messages = all_messages()
         self._raw: dict[tuple[str, str], list[str]] = {}
         self._last: dict[tuple[str, str], float] = {}
+        self.edit_day: dict[str, str] = {}  # Kreis -> Auswahl aus DAY_OPTIONS
 
     async def _read(self, key: tuple[str, str], *, fresh: bool, max_age: int) -> bool:
         try:
