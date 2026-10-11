@@ -31,7 +31,7 @@ def add(label, f):
 from custom_components.vaillant_ebus import sensor, binary_sensor, number, select, switch, button, schedule_editor, oil, text
 E="entry"
 add("sensor", lambda: [sensor.VaillantSensor(coord,E,d) for d in sensor.SENSORS] + [sensor.ScheduleSensor(coord,E,c,n) for c,n in spec.TIMER_CIRCUITS.items()] + [sensor.HolidaySensor(coord,E)])
-add("oil", lambda: [oil.OilUsageSensor(coord,E,"oil_used_hc","x","burner_hours"), oil.NozzleFlowNumber(coord,E)])
+add("oil", lambda: [oil.OilUsageSensor(coord,E,"oil_used_hc","x","hc"), oil.BurnerRuntimeSensor(coord,E,"burner_fine_hc","x","hc"), oil.NozzleFlowNumber(coord,E)])
 add("binary", lambda: [binary_sensor.VaillantBinary(coord,E,d) for d in binary_sensor.BINARIES])
 add("number", lambda: [number.VaillantNumber(coord,E,d) for d in number.NUMBERS])
 add("select", lambda: [select.VaillantModeSelect(coord,E,m) for m in select.MODES] + [schedule_editor.ScheduleDaySelect(coord,E,c,n) for c,n in spec.TIMER_CIRCUITS.items()])
@@ -39,7 +39,7 @@ add("switch", lambda: [switch.PartySwitch(coord,E), switch.ParallelChargingSwitc
 add("button", lambda: [button.QuickLoadButton(coord,E)])
 from custom_components.vaillant_ebus import shower
 mgr = MagicMock(); mgr.active = False; mgr.phase = "idle"; mgr.state = {}
-add("shower", lambda: [shower.ShowerSwitch(coord,E,mgr), shower.ShowerStatusSensor(coord,E,mgr)] + shower.shower_numbers(coord,E))
+add("shower", lambda: [shower.ShowerSwitch(coord,E,mgr), shower.ShowerStatusSensor(coord,E,mgr)] + shower.shower_numbers(coord,E) + [shower.ShowerPauseSwitch(coord,E)])
 add("text", lambda: [schedule_editor.ScheduleSlotText(coord,E,c,n,s) for c,n in spec.TIMER_CIRCUITS.items() for s in range(3)])
 
 bad = 0; uids = set()
@@ -55,7 +55,7 @@ for e in ents:
         bad += 1; print(f"  FEHLER {name}: {type(ex).__name__}: {ex}"); traceback.print_exc(limit=2)
 print(f"\n{len(ents)} Entitaeten geprueft, {bad} Probleme")
 for e in ents:
-    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber"):
+    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber","ShowerPauseSwitch","BurnerRuntimeSensor","OilUsageSensor"):
         e.hass = hass
         try: print(f"  {type(e).__name__:22} {e.unique_id[-28:]:28} -> {e.state!r}")
         except Exception as ex: print("  ", type(e).__name__, "state fehlt:", ex)

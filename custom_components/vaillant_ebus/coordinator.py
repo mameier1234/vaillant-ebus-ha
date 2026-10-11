@@ -61,6 +61,7 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.shower_threshold: float = 45.0  # Dusch-Wunsch: Puffer oben darunter -> aufheizen
         self.shower_circ_min: float = 5.0  # Dusch-Wunsch: Zirkulationsdauer (nach dem Aufheizen)
         self.shower_heat_max: float = 45.0  # Dusch-Wunsch: maximale Aufheizzeit
+        self.shower_pause_heating: bool = False  # Dusch-Wunsch: Parallele Ladung waehrend der Ladung aus
         self.shower = None  # ShowerManager
         self.nozzle_lph: float = 2.5  # Brenner-Durchsatz in L/h (Schaetzwert, per number-Entitaet einstellbar)
         self._starts_max: dict[str, float] = {}

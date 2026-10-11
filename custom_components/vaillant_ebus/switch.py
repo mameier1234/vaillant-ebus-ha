@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import VaillantConfigEntry
 from .ebusd import EbusdError
 from .entity import VaillantEntity
-from .shower import ShowerSwitch
+from .shower import ShowerPauseSwitch, ShowerSwitch
 from .spec import QUICK_PARTY
 
 
@@ -23,6 +23,7 @@ async def async_setup_entry(
         PartySwitch(coordinator, entry.entry_id),
         ParallelChargingSwitch(coordinator, entry.entry_id),
         ShowerSwitch(coordinator, entry.entry_id, entry.runtime_data.shower),
+        ShowerPauseSwitch(coordinator, entry.entry_id),
     ])
 
 

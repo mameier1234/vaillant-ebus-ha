@@ -24,6 +24,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -42,6 +43,8 @@ DEFAULT_RATE = 0.35  # K/min Aufheizrate "Puffer oben" (aus Verlaufsdaten; wird 
 SAFETY = 1.5  # Fensterlaenge = Prognose * SAFETY + MARGIN
 MARGIN_MIN = 10
 MIN_WINDOW_MIN = 20
+PAUSE_FACTOR = 1.25  # Startschaetzung: mit pausierter Heizung ca. 25 % schneller (wird gelernt)
+PARALLEL = ("hwc", "HcParallelStorageFillingEnabled2")
 
 
 class ShowerManager:
@@ -51,6 +54,7 @@ class ShowerManager:
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.shower")
         self._learn: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.shower_learn")
         self.rate: float = DEFAULT_RATE
+        self.rate_pause: float = DEFAULT_RATE * PAUSE_FACTOR
         self.state: dict[str, Any] = {}
         self._task: asyncio.Task | None = None
 
@@ -68,11 +72,11 @@ class ShowerManager:
         self._c.async_update_listeners()
 
     # --- Lebenszyklus ----------------------------------------------------------------
-    def eta_minutes(self, top: float | None, threshold: float) -> float | None:
+    def eta_minutes(self, top: float | None, threshold: float, pause: bool = False) -> float | None:
         """Prognose in Minuten bis 'Puffer oben' die Schwelle (+Hysterese) erreicht."""
         if top is None:
             return None
-        return max(0.0, threshold + HYSTERESIS - top) / self.rate
+        return max(0.0, threshold + HYSTERESIS - top) / (self.rate_pause if pause else self.rate)
 
     def _window_minutes(self, eta: float | None, heat_max: float) -> float:
         if eta is None:
@@ -89,13 +93,18 @@ class ShowerManager:
         if minutes >= 5 and rise >= 2:
             obs = rise / minutes
             if 0.05 <= obs <= 2.0:
-                self.rate = round(0.7 * self.rate + 0.3 * obs, 3)
-                await self._learn.async_save({"rate": self.rate})
-                _LOGGER.info("Dusch-Wunsch: Heizrate gelernt: %.2f K/min (beobachtet %.2f)", self.rate, obs)
+                if self.state.get("pause") and self.state.get("par_restore"):
+                    self.rate_pause = round(0.7 * self.rate_pause + 0.3 * obs, 3)
+                else:
+                    self.rate = round(0.7 * self.rate + 0.3 * obs, 3)
+                await self._learn.async_save({"rate": self.rate, "rate_pause": self.rate_pause})
+                _LOGGER.info("Dusch-Wunsch: Heizrate gelernt: %.2f / pausiert %.2f K/min (beobachtet %.2f)",
+                             self.rate, self.rate_pause, obs)
 
     async def async_load(self) -> None:
         learned = await self._learn.async_load() or {}
         self.rate = float(learned.get("rate", DEFAULT_RATE))
+        self.rate_pause = float(learned.get("rate_pause", self.rate * PAUSE_FACTOR))
         self.state = await self._store.async_load() or {}
         if self.state:
             self.state.setdefault("cc_set", True)  # Zustand aus v0.8.0: Zirkulation lief von Anfang an
@@ -106,6 +115,7 @@ class ShowerManager:
         if self.active:
             return
         client = self._c.client
+        pause = bool(self._c.shower_pause_heating)
         try:
             prev = (await client.read("cc", "Mode", fresh=True))[1]
             top = await self._top()
@@ -113,24 +123,28 @@ class ShowerManager:
             thr, circ, heat = self._c.shower_threshold, self._c.shower_circ_min, self._c.shower_heat_max
             st: dict[str, Any] = {
                 "prev_cc": prev, "cc_set": False, "start": now.isoformat(), "threshold": thr, "circ_min": circ,
-                "heat_max": heat, "window": None, "phase": "circ", "top": top,
+                "heat_max": heat, "window": None, "phase": "circ", "top": top, "pause": False, "par_restore": None,
                 "circ_end": (now + timedelta(minutes=circ)).isoformat(),
             }
+            self.state = st  # damit _finish bei Fehlern alles Geaenderte zuruecknehmen kann
             if top is not None and top < thr:
-                eta = self.eta_minutes(top, thr)
+                eta = self.eta_minutes(top, thr, pause)
                 win = self._window_minutes(eta, heat)
                 st.update(phase="heat", heat_end=(now + timedelta(minutes=win)).isoformat(), eta_min=eta,
-                          heat_start=now.isoformat(), heat_start_top=top)
+                          heat_start=now.isoformat(), heat_start_top=top, pause=pause)
                 st.pop("circ_end")
-                self.state = st  # damit _open_window bei Fehlern sauber aufraeumen kann
                 st["window"] = await self._open_window(win)
+                if pause:
+                    par = (await client.read(*PARALLEL, fresh=True))[0]
+                    if par == "yes":
+                        await client.write(*PARALLEL, "no")  # Heizung waehrend der Ladung pausieren
+                        st["par_restore"] = "yes"
             else:
                 await client.write("cc", "SetMode", "on")  # Puffer ist schon warm: gleich zirkulieren
                 st["cc_set"] = True
         except EbusdError as err:
-            self.state = {}
+            await self._finish()  # alles bereits Geaenderte zuruecknehmen
             raise HomeAssistantError(f"Dusch-Wunsch konnte nicht gestartet werden: {err}") from err
-        self.state = st
         await self._save()
         self._task = self._hass.async_create_task(self._run())
 
@@ -173,6 +187,12 @@ class ShowerManager:
         await self._c.async_write_schedule("hwc", day, merged)
         return {"day": day, "orig": [list(x) for x in orig], "slot": [start, end]}
 
+    async def _restore_parallel(self) -> None:
+        val = self.state.get("par_restore")
+        if val:
+            await self._c.client.write(*PARALLEL, val)
+            self.state["par_restore"] = None
+
     async def _close_window(self) -> None:
         w = self.state.get("window")
         if not w:
@@ -183,6 +203,7 @@ class ShowerManager:
     async def _finish(self) -> None:
         """Alles zuruecknehmen; bei Fehlern Zustand behalten, der Lauf versucht es weiter."""
         try:
+            await self._restore_parallel()
             await self._close_window()
             if self.state.get("cc_set"):
                 prev = self.state.get("prev_cc", "auto")
@@ -212,13 +233,14 @@ class ShowerManager:
                     elif ph == "heat":
                         top = await self._top()
                         self.state["top"] = top
-                        eta = self.eta_minutes(top, self.state["threshold"])
+                        eta = self.eta_minutes(top, self.state["threshold"], bool(self.state.get("pause")))
                         self.state["eta_min"] = None if eta is None else round(eta, 1)
                         heat_end = dt_util.parse_datetime(self.state["heat_end"])
                         reached = top is not None and top >= self.state["threshold"] + HYSTERESIS
                         if reached or now >= heat_end:
                             if reached:
                                 await self._learn_rate(top, now)
+                            await self._restore_parallel()
                             await self._close_window()
                             warm_enough = reached or (top is not None and top >= self.state["threshold"] - 3)
                             if warm_enough:
@@ -264,13 +286,44 @@ class ShowerSwitch(VaillantEntity, SwitchEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         s = self._m.state
         return {"phase": self._m.phase, "puffer_oben": s.get("top"), "schwelle": s.get("threshold"),
-                "prognose_min": s.get("eta_min")} if s else {}
+                "prognose_min": s.get("eta_min"), "heizung_pausiert": bool(s.get("par_restore"))} if s else {}
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._m.async_start()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self._m.async_cancel()
+
+
+class ShowerPauseSwitch(VaillantEntity, SwitchEntity, RestoreEntity):
+    """Option: Heizung waehrend der Dusch-Ladung pausieren (Parallele Ladung AUS), danach zurueck."""
+
+    _attr_icon = "mdi:radiator-off"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "shower_pause_heating", "Dusch-Wunsch Heizung pausieren")
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.coordinator.shower_pause_heating)
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None:
+            self.coordinator.shower_pause_heating = last.state == "on"
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        self.coordinator.shower_pause_heating = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        self.coordinator.shower_pause_heating = False
+        self.async_write_ha_state()
 
 
 class ShowerStatusSensor(VaillantEntity, SensorEntity):
@@ -298,6 +351,7 @@ class ShowerStatusSensor(VaillantEntity, SensorEntity):
         end = s.get("heat_end") if self._m.phase == "heat" else s.get("circ_end")
         return {"ende": end, "puffer_oben": s.get("top"), "schwelle": s.get("threshold"),
                 "prognose_min": s.get("eta_min"), "heizrate_k_pro_min": self._m.rate,
+                "heizrate_pausiert_k_pro_min": self._m.rate_pause, "heizung_pausiert": bool(s.get("par_restore")),
                 "zusatzfenster": s.get("window", {}) and s["window"].get("slot")}
 
 

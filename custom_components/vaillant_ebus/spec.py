@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+FASTEST = 15  # Sekunden: Brenner, Ladepumpe, Puffer oben (Oelstatistik, Dusch-Wunsch)
 FAST = 60  # Sekunden
 SLOW = 600
 
@@ -43,15 +44,15 @@ ITEMS: dict[str, Item] = {
     "system_flow_temp": Item("ui", "FlowTemp", ok=True),
     "system_flow_desired": Item("ui", "FlowTempDesired"),
     "room_temp": Item("ui", "RoomTemp", ok=True),
-    "buffer_top": Item("hwc", "Storage1Sensor2", ok=True),
+    "buffer_top": Item("hwc", "Storage1Sensor2", interval=FASTEST, fresh=True, ok=True),
     "buffer_lower_middle": Item("sc", "Storage4Sensor3", ok=True),
     "buffer_bottom": Item("sc", "Storage2Sensor3", ok=True),
     "water_pressure": Item("bai", "WaterPressure", ok=True),
     # Status
-    "flame": Item("bai", "Flame", numeric=False),
+    "flame": Item("bai", "Flame", interval=FASTEST, fresh=True, numeric=False),
     "heating_pump": Item("mc", "Status0a", idx=2, numeric=False),
     "mixer_state": Item("mc", "Status0a", idx=1, numeric=False),
-    "charge_pump": Item("hwc", "Status0a", idx=2, numeric=False),
+    "charge_pump": Item("hwc", "Status0a", idx=2, interval=FASTEST, fresh=True, numeric=False),
     "circulation_pump": Item("cc", "Status0a", idx=2, numeric=False),
     "party_active": Item("mc", "IsInParty", numeric=False),
     "holiday_active": Item("mc", "IsInHoliday", numeric=False),

@@ -17,11 +17,5 @@ async def main():
         print(f"  {k:20} {data.get(k)!r}")
     print("Zeitprogramme:", {c: len(v) for c, v in data["schedules"].items()}, "| mc Samstag:", data["schedules"]["mc"].get("Saturday"))
     print("Ferien:", data["holiday_period"])
-    # OilUsage-Logik mit echtem Koordinator-Datensatz
-    from custom_components.vaillant_ebus.oil import OilUsageSensor
-    coord.data = data; coord.nozzle_lph = 2.5
-    s = OilUsageSensor(coord, "e", "oil", "x", "burner_hours"); s.hass = hass; s.async_write_ha_state = lambda: None
-    s._handle_coordinator_update(); first = s.native_value
-    data2 = dict(data); data2["burner_hours"] = data["burner_hours"] + 2; coord.data = data2
-    s._handle_coordinator_update(); print("Oel: erst", first, "L -> nach +2 h:", s.native_value, "L (erwartet 5.0)")
+
 asyncio.run(main())

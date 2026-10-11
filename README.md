@@ -6,7 +6,7 @@ Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung �
 Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
 Solar (Resol) ist bewusst nicht enthalten.
 
-## Stand 0.8 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
+## Stand 0.9 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
 - **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
   Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
 - **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
@@ -16,6 +16,9 @@ Solar (Resol) ist bewusst nicht enthalten.
 - **Brenner & Heizöl:** Laufzeit und Starts getrennt für Heizen und Warmwasser (Starts exakt = Hunderter-Zähler + Rest), daraus Heizölverbrauch
   (Δ Stunden × *Brenner Durchsatz*, L/h, Schätzwert – mit Düse/Kesselleistung abgleichen). Die Summen laufen inkrementell, eine spätere
   Änderung des Durchsatzes schreibt die Vergangenheit nicht um.
+- **Brenner genau:** Brenner, Ladepumpe und *Puffer oben* werden alle 15 s frisch gelesen. Die Brennerlaufzeit wird zusätzlich
+  **sekundengenau mitgezählt**, getrennt nach Heizen (Brenner an, Ladepumpe aus) und Warmwasser-Ladung (beide an); der Heizölverbrauch
+  rechnet daraus × Durchsatz. Der Stundenzähler des Kessels (ganze Stunden) bleibt als eigener Sensor erhalten.
 - **Dusch-Wunsch:** Schalter `Dusch-Wunsch` (an = starten, aus = abbrechen), Status-Sensor und drei Einstellungen (Puffer-Schwelle 45 °C,
   Zirkulation 5 min, max. Aufheizzeit 45 min). Ablauf: Liegt *Puffer oben* unter der Schwelle und läuft
   gerade kein Ladefenster, wird für heute ein Zusatzfenster ins Pufferladungs-Programm geschrieben (der Regler lädt dann, getestet). **Erst wenn

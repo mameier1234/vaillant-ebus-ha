@@ -24,11 +24,16 @@ class FakeClient:
     def __init__(self, sim, top, cc="auto", fail_writes=0):
         self.sim, self.top, self.cc, self.log, self.fail = sim, top, cc, [], fail_writes
         self.heating = False
+        self.par, self.fail_par = 'yes', False
     async def read(self, circuit, msg, fresh=False, max_age=0):
         if (circuit, msg) == ("cc", "Mode"): return ["20", self.cc, "off", "circulation", "00", "night"]
         if (circuit, msg) == ("hwc", "Storage1Sensor2"): return [f"{self.top:.2f}", "ok"]
+        if (circuit, msg) == ("hwc", "HcParallelStorageFillingEnabled2"): return [self.par]
         raise EbusdError("unbekannt")
     async def write(self, circuit, msg, value):
+        if (circuit, msg) == ("hwc", "HcParallelStorageFillingEnabled2"):
+            if self.fail_par and value == "no": raise EbusdError("simulierter Fehler (Parallele Ladung)")
+            self.par = value; self.log.append((self.sim.t.astimezone(dt_util.DEFAULT_TIME_ZONE).strftime("%H:%M"), circuit, msg, value)); return
         if self.fail > 0 and circuit == "cc": self.fail -= 1; raise EbusdError("simulierter Fehler")
         self.log.append((self.sim.t.astimezone(dt_util.DEFAULT_TIME_ZONE).strftime("%H:%M"), circuit, msg, value))
         if (circuit, msg) == ("cc", "SetMode"): self.cc = value
@@ -37,6 +42,7 @@ class FakeCoordinator:
     def __init__(self, sim, client, program):
         self.sim, self.client, self.prog = sim, client, {"Sunday": list(program)}
         self.shower_threshold, self.shower_circ_min, self.shower_heat_max = 45.0, 10.0, 45.0
+        self.shower_pause_heating = False
         self.writes = []
     def async_update_listeners(self): pass
     async def _read(self, key, fresh=False, max_age=0): return True
@@ -49,10 +55,11 @@ class FakeCoordinator:
 class FakeHass:
     def async_create_task(self, coro): return asyncio.ensure_future(coro)
 
-async def run(label, start_local, top, program, *, warm_rate=0.5, actions=None, fail_writes=0, cc="auto"):
+async def run(label, start_local, top, program, *, warm_rate=0.5, actions=None, fail_writes=0, cc="auto", pause=False, fail_par=False, expect_error=False):
     stores = {}
     sim = Sim(start_local); client = FakeClient(sim, top, cc, fail_writes)
     coord = FakeCoordinator(sim, client, program)
+    coord.shower_pause_heating = pause; client.fail_par = fail_par
     shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
     m = shower.ShowerManager(FakeHass(), coord)
     shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
@@ -63,7 +70,14 @@ async def run(label, start_local, top, program, *, warm_rate=0.5, actions=None, 
         if loaded and client.top < 55: client.top += warm_rate * s / 60
         await real_sleep(0)
     shower.asyncio.sleep = fake_sleep
-    await m.async_start()
+    err = None
+    try:
+        await m.async_start()
+    except Exception as e:
+        err = e
+    if expect_error:
+        print(f"\n=== {label}\n  Fehler wie erwartet: {err}\n  Programm nachher: {coord.prog['Sunday']} | par: {client.par} | cc: {client.cc} | aktiv: {m.active}")
+        return m, client, coord, sim
     for i in range(400):
         if actions: await actions(m, sim, i)
         if not m.active: break
@@ -111,6 +125,24 @@ async def main():
     m, c, co, s = await run("J) Heizrate lernen", L(11, 51), 36.0, P2, warm_rate=0.5)
     print("  gelernte Rate:", m.rate, "(Start 0.35, beobachtet ca. 0.5)")
     assert 0.38 < m.rate < 0.48, "J: Rate wurde nicht plausibel gelernt"
+    # K) Heizung pausieren: Parallele Ladung AUS waehrend des Aufheizens, danach zurueck auf AN
+    m, c, co, s = await run("K) Heizung pausieren", L(11, 51), 36.0, P, pause=True)
+    par = [w for w in c.log if w[2] == "HcParallelStorageFillingEnabled2"]
+    print("  Parallele-Ladung-Zugriffe:", par)
+    assert [w[3] for w in par] == ["no", "yes"] and c.par == "yes", "K: Parallele Ladung nicht korrekt aus/an"
+    t_yes = par[1][0]; t_cc = [w[0] for w in c.log if w[2:] == ("SetMode", "on")][0]
+    assert t_yes <= t_cc, "K: Heizung muss vor der Zirkulation wieder laufen"
+    # K1) ohne Option bleibt die Parallele Ladung unberuehrt
+    m, c, co, s = await run("K1) ohne Pause-Option", L(11, 51), 36.0, P, pause=False)
+    assert not [w for w in c.log if w[2] == "HcParallelStorageFillingEnabled2"], "K1: Parallele Ladung darf nicht angefasst werden"
+    # K2) Abbruch in der Aufheizphase stellt Parallele Ladung zurueck
+    async def cancel_k(m, sim, i):
+        if i == 5 and m.active: await m.async_cancel()
+    m, c, co, s = await run("K2) Abbruch bei pausierter Heizung", L(11, 51), 36.0, P, pause=True, actions=cancel_k, warm_rate=0.01)
+    assert not m.active and c.par == "yes" and co.prog["Sunday"] == P, "K2 fehlgeschlagen"
+    # K3) Fehler beim Pausieren: alles bereits Geaenderte wird zurueckgenommen
+    m, c, co, s = await run("K3) Fehler beim Pausieren (Start)", L(11, 51), 36.0, P, pause=True, fail_par=True, expect_error=True)
+    assert not m.active and c.par == "yes" and co.prog["Sunday"] == P and c.cc == "auto", "K3: Aufraeumen nach Startfehler fehlgeschlagen"
     # F) Fehler beim Zurueckstellen -> Wiederholung (echte Fehler: die naechsten 2 cc-Schreibzugriffe schlagen fehl)
     async def break_cc(m, sim, i):
         if i == 1: m._c.client.fail = 2
@@ -159,5 +191,37 @@ async def main():
     print("\n=== H2) Zustand aus v0.8.0 wird fortgesetzt")
     print("  Programm nachher:", coord.prog["Sunday"], "| cc:", client.cc, "| cc-Zugriffe:", client.log)
     assert not m3.active and client.cc == "auto" and coord.prog["Sunday"] == [("05:10", "11:00"), ("13:00", "21:30")], "H2 fehlgeschlagen"
+    # K4) Neustart mitten in der pausierten Heizphase: Parallele Ladung wird zurueckgestellt
+    sim = Sim(L(12, 10)); client = FakeClient(sim, 41.0); client.par = "no"
+    coord = FakeCoordinator(sim, client, [("05:10", "11:00"), ("12:00", "21:30")])
+    stores = {}; shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
+    shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
+    stores["vaillant_ebus.shower"] = FakeStore()
+    stores["vaillant_ebus.shower"].data = {"prev_cc": "auto", "cc_set": False, "start": sim.t.isoformat(), "threshold": 45.0, "circ_min": 5.0,
+        "heat_max": 45.0, "window": {"day": "Sunday", "orig": [["05:10", "11:00"], ["13:00", "21:30"]], "slot": ["12:00", "13:00"]},
+        "phase": "heat", "top": 41.0, "pause": True, "par_restore": "yes", "heat_end": (sim.t - timedelta(minutes=1)).isoformat()}
+    real_sleep = REAL_SLEEP
+    async def hs3(sec):
+        sim.t += timedelta(seconds=sec); await real_sleep(0)
+    shower.asyncio.sleep = hs3
+    m4 = shower.ShowerManager(FakeHass(), coord); await m4.async_load()
+    for _ in range(100):
+        if not m4.active: break
+        await real_sleep(0)
+    print("\n=== K4) Neustart in pausierter Heizphase")
+    print("  par:", client.par, "| Programm:", coord.prog["Sunday"], "| aktiv:", m4.active)
+    assert not m4.active and client.par == "yes" and coord.prog["Sunday"] == [("05:10", "11:00"), ("13:00", "21:30")], "K4 fehlgeschlagen"
+    # L) Brenner-Integrator: Sample-and-hold, Kategorien, Luecken
+    from custom_components.vaillant_ebus.oil import FlameIntegrator
+    t0 = datetime(2026, 10, 11, 12, 0, tzinfo=timezone.utc); hc, hw = FlameIntegrator("hc"), FlameIntegrator("hwc")
+    seq = [(0, "off", "off"), (15, "on", "on"), (30, "on", "on"), (45, "on", "off"), (60, "off", "off"), (75, "off", "off")]
+    tot_hc = tot_hw = 0.0
+    for sec, fl, pu in seq:
+        d = {"flame": fl, "charge_pump": pu}; n = t0 + timedelta(seconds=sec)
+        tot_hc += hc.delta_seconds(d, n); tot_hw += hw.delta_seconds(d, n)
+    print("\n=== L) Brenner-Integrator: Heizen", tot_hc, "s | Warmwasser", tot_hw, "s (erwartet 15 / 30)")
+    assert (tot_hc, tot_hw) == (15.0, 30.0), "L: Brennerzaehlung falsch"
+    gap = FlameIntegrator("hc"); gap.delta_seconds({"flame": "on", "charge_pump": "off"}, t0)
+    assert gap.delta_seconds({"flame": "on", "charge_pump": "off"}, t0 + timedelta(hours=1)) == 0.0, "L: lange Luecke darf nicht als Brennerlauf zaehlen"
     print("\nALLE SZENARIEN BESTANDEN")
 asyncio.run(main())
