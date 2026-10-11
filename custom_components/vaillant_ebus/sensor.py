@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 
 from . import VaillantConfigEntry
 from .entity import VaillantEntity
+from .mixer import PipeSpreadSensor
 from .oil import BurnerRuntimeSensor, OilUsageSensor
 from .presence import PresenceStatusSensor
 from .shower import ShowerStatusSensor
@@ -89,6 +90,7 @@ async def async_setup_entry(
         BurnerRuntimeSensor(coordinator, entry.entry_id, "burner_fine_hc", "Brennerlaufzeit Heizen (genau)", "hc"),
         BurnerRuntimeSensor(coordinator, entry.entry_id, "burner_fine_hwc", "Brennerlaufzeit Warmwasser (genau)", "hwc"),
     ]
+    entities.append(PipeSpreadSensor(coordinator, entry.entry_id))
     async_add_entities(entities)
 
 

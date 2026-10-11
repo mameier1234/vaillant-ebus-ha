@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VaillantConfigEntry
 from .entity import VaillantEntity
+from .mixer import MixerStuckBinary
 
 ON_VALUES = {"on", "yes", "1"}
 
@@ -36,7 +37,8 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: VaillantConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    async_add_entities(VaillantBinary(coordinator, entry.entry_id, d) for d in BINARIES)
+    async_add_entities([VaillantBinary(coordinator, entry.entry_id, d) for d in BINARIES]
+                       + [MixerStuckBinary(coordinator, entry.entry_id)])
 
 
 class VaillantBinary(VaillantEntity, BinarySensorEntity):

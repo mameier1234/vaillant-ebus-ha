@@ -18,6 +18,7 @@ const E = {
   dusch: "switch.heating_vaillant_heizung_dusch_wunsch",
   duschStatus: "sensor.heating_vaillant_heizung_dusch_wunsch_status",
   anw: "switch.heating_vaillant_heizung_anwesenheitserkennung_warmwasser",
+  mixStuck: B + "mischer_hangt_verdacht",
   anwStatus: "sensor.heating_vaillant_heizung_anwesenheit_warmwasser_status",
 };
 const OR = "#ff9800", RD = "#ff7043", GR = "#4caf50";
@@ -177,7 +178,7 @@ class VaillantSchemaCard extends HTMLElement {
 
     const pS = RUN(E.pumpeSolar), pW = RUN(E.pumpeWT);
     const br = ON(E.brenner), hp = ON(E.hkPumpe), lp = ON(E.ladePumpe), zp = ON(E.zirk);
-    const mx = { open: "öffnet", close: "schließt", off: "ruht" }[S(E.mischer)] || "–";
+    const mx = ON(E.mixStuck) ? "⚠ hängt?" : ({ open: "öffnet", close: "schließt", off: "ruht" }[S(E.mischer)] || "–");
     const tank = N(E.tank);
 
     const hot = (x, y, w, h, ent) => `<rect class='hot' data-entity='${ent}' x='${x}' y='${y}' width='${w}' height='${h}' fill='transparent'/>`;
@@ -216,7 +217,7 @@ ${tx(345, 46, "Pufferspeicher", "t")}${zone(60, E.pufferOben, "Oben (Fühler 1)"
 ${box(450, 14, 190, 34)}${tx(545, 31, "Außen " + F(N(E.aussen)) + " °C", "t")}${hot(450, 14, 190, 34, E.aussen)}
 ${box(450, 70, 190, 56)}${tx(545, 88, "Frischwasser", "t")}${tx(545, 108, "Zirkulation " + (zp ? "läuft" : "aus"), "s")}${dot(470, 108, 5, zp)}${hot(450, 70, 190, 56, E.zirk)}
 ${box(450, 160, 190, 68)}${tx(545, 177, "Heizkreis", "t")}${tx(545, 195, "Vorlauf " + F(N(E.hkVL)) + " · Soll " + F(N(E.hkSoll), 0), "s")}${dot(500, 213, 5, hp)}<text x='512' y='217' class='s'>Pumpe ${hp ? "an" : "aus"}</text>${hot(450, 160, 190, 68, E.hkVL)}
-${dot(565, 261, 12, false)}<text x='585' y='265' class='s'>Mischer ${mx}</text>${hot(553, 249, 24, 24, E.mischer)}
+${dot(565, 261, 12, false)}<text x='585' y='265' class='s'${ON(E.mixStuck) ? " style='fill:#ff7043;font-weight:500'" : ""}>Mischer ${mx}</text>${hot(553, 249, 24, 24, E.mischer)}
 ${box(450, 330, 190, 56, br ? "rgba(255,112,67,.28)" : null)}${tx(545, 348, "Kessel", "t")}${tx(545, 368, F(N(E.kesselVL)) + " °C · Brenner " + (br ? "läuft" : "aus"), "s")}${br ? `<path d='M618 380 Q610 368 618 356 Q620 366 626 368 Q630 362 624 354 Q640 364 634 380 Z' fill='${OR}'/>` : ""}${hot(450, 330, 190, 56, E.brenner)}
 ${dot(425, 358, 9, lp)}${tx(425, 404, "Ladepumpe", "s")}${hot(414, 347, 22, 22, E.ladePumpe)}
 ${box(40, 430, 190, 48)}${tx(135, 447, "Wasserdruck", "s")}${tx(135, 466, F(N(E.druck), 2) + " bar", "t")}${hot(40, 430, 190, 48, E.druck)}
@@ -227,7 +228,7 @@ ${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(
 </svg>`;
   }
   _svgMobile() {
-    const { N, F, I, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
+    const { N, F, I, ON, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='10' y='${y}' width='130' height='60' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(75, y + 22, F(t) + " °C", "z") + tx(75, y + 42, l, "zs") + hot(10, y, 130, 60, ent); };
     return `<svg viewBox='0 0 360 647' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
 <style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pa2{font-size:13px;font-weight:500;fill:#fff}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
@@ -250,7 +251,7 @@ ${box(190, 74, 160, 44)}${tx(270, 90, "WT-Pumpe", "t")}${tx(270, 108, pW ? "läu
 ${zone(150, E.pufferOben, "Oben (Fühler 1)")}${zone(210, E.pufferMitte, "Mitte (Resol)")}${zone(270, E.puffer4, "Fühler 4")}${zone(330, E.pufferUnten, "Unten (Fühler 2)")}
 <rect x='10' y='150' width='130' height='240' rx='6' fill='none' stroke='var(--primary-text-color)' stroke-width='1' opacity='.5'/>
 ${box(160, 150, 190, 50)}${tx(255, 166, "Frischwasser", "t")}${tx(255, 184, "Zirkulation " + (zp ? "läuft" : "aus"), "s")}${dot(176, 166, 5, zp)}${hot(160, 150, 190, 50, E.zirk)}
-${box(160, 215, 190, 80)}${tx(255, 231, "Heizkreis", "t")}${tx(255, 249, "Vorlauf " + F(N(E.hkVL)) + " · Soll " + F(N(E.hkSoll), 0), "s")}${dot(176, 267, 5, hp)}<text x='188' y='271' class='s'>Pumpe ${hp ? "an" : "aus"}</text><text x='262' y='271' class='s'>Mischer ${mx}</text>${hot(160, 215, 190, 80, E.hkVL)}
+${box(160, 215, 190, 80)}${tx(255, 231, "Heizkreis", "t")}${tx(255, 249, "Vorlauf " + F(N(E.hkVL)) + " · Soll " + F(N(E.hkSoll), 0), "s")}${dot(176, 267, 5, hp)}<text x='188' y='271' class='s'>Pumpe ${hp ? "an" : "aus"}</text><text x='262' y='271' class='s'${ON(E.mixStuck) ? " style='fill:#ff7043;font-weight:500'" : ""}>Mischer ${mx}</text>${hot(160, 215, 190, 80, E.hkVL)}
 ${box(160, 310, 190, 60, br ? "rgba(255,112,67,.28)" : null)}${tx(255, 328, "Kessel", "t")}${tx(255, 348, F(N(E.kesselVL)) + " °C · Brenner " + (br ? "läuft" : "aus"), "s")}${br ? `<path d='M330 366 Q324 356 330 346 Q332 354 337 356 Q340 350 336 344 Q348 352 343 366 Z' fill='${OR}'/>` : ""}${hot(160, 310, 190, 60, E.brenner)}
 ${box(160, 380, 190, 36)}${tx(255, 398, "Ladepumpe " + (lp ? "läuft" : "aus"), "s")}${dot(176, 398, 5, lp)}${hot(160, 380, 190, 36, E.ladePumpe)}
 ${box(10, 436, 170, 46)}${tx(95, 452, "Wasserdruck", "s")}${tx(95, 470, F(N(E.druck), 2) + " bar", "t")}${hot(10, 436, 170, 46, E.druck)}
