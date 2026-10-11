@@ -15,6 +15,8 @@ const E = {
   brenner: B + "brenner", hkPumpe: B + "heizkreispumpe", ladePumpe: B + "ladepumpe_puffer",
   zirk: B + "zirkulationspumpe", tank: "sensor.heizoel_tanklevel",
   betrieb: "select.vaillant_heizung_betriebsart",
+  dusch: "switch.heating_vaillant_heizung_dusch_wunsch",
+  duschStatus: "sensor.heating_vaillant_heizung_dusch_wunsch_status",
 };
 const OR = "#ff9800", RD = "#ff7043", GR = "#4caf50";
 
@@ -37,6 +39,7 @@ class VaillantSchemaCard extends HTMLElement {
       this.shadowRoot.addEventListener("click", (ev) => {
         const m = ev.target.closest && ev.target.closest("[data-set]");
         if (m) { this._setMode(m.dataset.set); return; }
+        if (ev.target.closest && ev.target.closest("[data-shower]")) { this._toggleShower(); return; }
         const t = ev.target.closest && ev.target.closest("[data-entity]");
         if (!t) return;
         this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: t.dataset.entity } }));
@@ -82,6 +85,31 @@ class VaillantSchemaCard extends HTMLElement {
       + seg(0, "winter", "Winter", "#ff7043") + seg(1, "summer", "Sommer", "#ffc107")
       + (bad ? `<text x='${x + w + 8}' y='${y + h / 2}' class='s' dominant-baseline='central'>${cur || "?"}</text>` : "");
   }
+  _toggleShower() {
+    const sw = this._hass && this._hass.states[E.dusch];
+    if (!sw || sw.state === "unavailable") return;
+    if (sw.state === "on") {
+      if (!window.confirm("Dusch-Wunsch abbrechen? (Zirkulation und Zusatzfenster werden zurückgenommen)")) return;
+      this._hass.callService("switch", "turn_off", { entity_id: E.dusch });
+    } else {
+      this._hass.callService("switch", "turn_on", { entity_id: E.dusch });
+    }
+  }
+  _showerBtn(x, y, w, h) {
+    const sw = this._hass.states[E.dusch], ss = this._hass.states[E.duschStatus];
+    const on = !!sw && sw.state === "on";
+    let label = "Dusch-Wunsch";
+    if (on && ss) {
+      const a = ss.attributes || {};
+      const mins = a.ende ? Math.max(0, Math.ceil((new Date(a.ende) - Date.now()) / 60000)) : null;
+      if (ss.state === "aufheizen") label = "Aufheizen" + (a.puffer_oben != null ? " · " + Number(a.puffer_oben).toFixed(1).replace(".", ",") + " °C" : "");
+      else if (ss.state === "zirkulation") label = "Zirkulation" + (mins !== null ? " · " + mins + " min" : "");
+      else label = "Aufräumen …";
+    }
+    return `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='${h / 2}' fill='${on ? "#29b6f6" : "var(--secondary-background-color)"}' stroke='var(--divider-color)'/>`
+      + `<text x='${x + w / 2}' y='${y + h / 2}' class='${on ? "pa" : "pb"}' text-anchor='middle' dominant-baseline='central'>${label}</text>`
+      + `<rect class='hot' data-shower='1' x='${x}' y='${y}' width='${w}' height='${h}' fill='transparent'><title>${on ? "Dusch-Wunsch läuft – antippen zum Abbrechen" : "Dusch-Wunsch starten: Puffer aufheizen, Zirkulation an"}</title></rect>`;
+  }
   getCardSize() { return 9; }
   static getStubConfig() { return {}; }
 
@@ -114,8 +142,9 @@ class VaillantSchemaCard extends HTMLElement {
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='290' y='${y}' width='110' height='80' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(345, y + 30, F(t) + " °C", "z") + tx(345, y + 52, l, "zs") + hot(290, y, 110, 80, ent); };
 
     return `<svg viewBox='0 0 680 556' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
 ${this._pill(50, 4, 190, 28)}<text x='252' y='18' class='s' dominant-baseline='central'>Betriebsart Heizung</text>
+${this._showerBtn(450, 4, 190, 28)}
 <g transform='translate(0,36)'>
 <g fill='none'>
 <line x1='95' y1='150' x2='95' y2='133' ${P(pS, OR)}/><line x1='95' y1='115' x2='95' y2='82' ${P(pS, OR)}/><line x1='155' y1='82' x2='155' y2='150' ${P(pS, OR)}/>
@@ -149,8 +178,8 @@ ${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(
     const { N, F, I, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='10' y='${y}' width='130' height='60' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(75, y + 22, F(t) + " °C", "z") + tx(75, y + 42, l, "zs") + hot(10, y, 130, 60, ent); };
     return `<svg viewBox='0 0 360 609' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
-${this._pill(10, 6, 340, 30)}
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+${this._pill(10, 6, 170, 30)}${this._showerBtn(190, 6, 160, 30)}
 <g transform='translate(0,46)'>
 <g fill='none'>
 <line x1='95' y1='54' x2='95' y2='74' ${P(pS, OR)}/>
