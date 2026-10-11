@@ -184,7 +184,7 @@ class ShowerManager:
         if len(merged) > 3:
             _LOGGER.warning("Dusch-Wunsch: Pufferladungs-Programm hat keinen freien Slot")
             return None
-        await self._c.async_write_schedule("hwc", day, merged)
+        await self._c.async_write_schedule("hwc", day, merged, internal=True)
         return {"day": day, "orig": [list(x) for x in orig], "slot": [start, end]}
 
     async def _restore_parallel(self) -> None:
@@ -197,7 +197,7 @@ class ShowerManager:
         w = self.state.get("window")
         if not w:
             return
-        await self._c.async_write_schedule("hwc", w["day"], [tuple(x) for x in w["orig"]])
+        await self._c.async_write_schedule("hwc", w["day"], [tuple(x) for x in w["orig"]], internal=True)
         self.state["window"] = None
 
     async def _finish(self) -> None:

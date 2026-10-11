@@ -47,7 +47,7 @@ class FakeCoordinator:
     def async_update_listeners(self): pass
     async def _read(self, key, fresh=False, max_age=0): return True
     def build_schedules(self): return {"hwc": {d: list(v) for d, v in self.prog.items()}}
-    async def async_write_schedule(self, circuit, day, slots):
+    async def async_write_schedule(self, circuit, day, slots, *, internal=False):
         from custom_components.vaillant_ebus.spec import normalize_slot
         self.prog[day] = sorted(normalize_slot(a, b) for a, b in slots)
         self.writes.append((self.sim.t.astimezone(dt_util.DEFAULT_TIME_ZONE).strftime("%H:%M"), list(self.prog[day])))

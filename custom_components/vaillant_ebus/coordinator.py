@@ -62,6 +62,9 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.shower_circ_min: float = 5.0  # Dusch-Wunsch: Zirkulationsdauer (nach dem Aufheizen)
         self.shower_heat_max: float = 45.0  # Dusch-Wunsch: maximale Aufheizzeit
         self.shower_pause_heating: bool = False  # Dusch-Wunsch: Parallele Ladung waehrend der Ladung aus
+        self.presence_enabled: bool = False  # Anwesenheitserkennung (Warmwasser-Pause)
+        self.presence_delay_min: float = 20.0
+        self.presence_suspended_day: str | None = None  # Tag, dessen Pufferladungs-Programm gerade geleert ist
         self.shower = None  # ShowerManager
         self.nozzle_lph: float = 2.5  # Brenner-Durchsatz in L/h (Schaetzwert, per number-Entitaet einstellbar)
         self._starts_max: dict[str, float] = {}
@@ -99,7 +102,14 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.client.write(circuit, message, value)
         await self.async_refresh_after_write(key)
 
-    async def async_write_schedule(self, circuit: str, day: str, slots: list[tuple[str, str]]) -> None:
+    async def async_write_schedule(
+        self, circuit: str, day: str, slots: list[tuple[str, str]], *, internal: bool = False
+    ) -> None:
+        if circuit == "hwc" and not internal and self.presence_suspended_day == day:
+            raise EbusdError(
+                "Pufferladung ist heute wegen Abwesenheit pausiert - Aenderungen bitte nach der Rueckkehr "
+                "(oder Anwesenheitserkennung ausschalten)"
+            )
         payload = format_schedule(slots)
         await self.client.write(circuit, f"Timer.{day}", payload)
         await self._read((circuit, f"Timer.{day}"), fresh=True, max_age=0)

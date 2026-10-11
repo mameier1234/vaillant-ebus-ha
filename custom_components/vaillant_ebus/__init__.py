@@ -12,9 +12,10 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 
-from .const import CONF_HOST, CONF_PORT, DOMAIN, SERVICE_SET_SCHEDULE
+from .const import CONF_HOST, CONF_PERSONS, CONF_PORT, DOMAIN, SERVICE_SET_SCHEDULE
 from .coordinator import VaillantCoordinator
 from .ebusd import EbusdClient, EbusdError
+from .presence import PresenceManager
 from .shower import ShowerManager
 from .spec import DAYS, TIMER_CIRCUITS
 
@@ -50,6 +51,7 @@ SET_SCHEDULE_SCHEMA = vol.Schema(
 class VaillantData:
     coordinator: VaillantCoordinator
     shower: ShowerManager
+    presence: PresenceManager
 
 
 type VaillantConfigEntry = ConfigEntry[VaillantData]
@@ -61,7 +63,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
     await coordinator.async_config_entry_first_refresh()
     shower = ShowerManager(hass, coordinator)
     coordinator.shower = shower
-    entry.runtime_data = VaillantData(coordinator, shower)
+    presence = PresenceManager(hass, coordinator, entry.options.get(CONF_PERSONS, []))
+    await presence.async_load()
+    entry.runtime_data = VaillantData(coordinator, shower, presence)
+    entry.async_on_unload(entry.add_update_listener(_options_updated))
 
     async def set_schedule(call: ServiceCall) -> None:
         """Schreibt jeden betroffenen Tag einzeln (daysel=selected) und liest zur Kontrolle zurueck."""
@@ -75,9 +80,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
     hass.services.async_register(DOMAIN, SERVICE_SET_SCHEDULE, set_schedule, SET_SCHEDULE_SCHEMA)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await shower.async_load()  # nach den Plattformen: Parameter (number-Entitaeten) sind dann gesetzt
+    presence.async_start()
     return True
 
 
+async def _options_updated(hass: HomeAssistant, entry: VaillantConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> bool:
+    entry.runtime_data.presence.async_stop()
     hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

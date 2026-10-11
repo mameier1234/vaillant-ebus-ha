@@ -4,6 +4,7 @@ DOMAIN = "vaillant_ebus"
 
 CONF_HOST = "host"
 CONF_PORT = "port"
+CONF_PERSONS = "persons"
 DEFAULT_PORT = 8888
 TICK_SECONDS = 15  # Koordinator-Takt; einzelne Nachrichten haben eigene Intervalle (spec.py)
 

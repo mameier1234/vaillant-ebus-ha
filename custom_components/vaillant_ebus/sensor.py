@@ -19,6 +19,7 @@ from homeassistant.util import dt as dt_util
 from . import VaillantConfigEntry
 from .entity import VaillantEntity
 from .oil import BurnerRuntimeSensor, OilUsageSensor
+from .presence import PresenceStatusSensor
 from .shower import ShowerStatusSensor
 from .spec import DAYS, TIMER_CIRCUITS
 
@@ -81,6 +82,7 @@ async def async_setup_entry(
     entities += [ScheduleSensor(coordinator, entry.entry_id, c, n) for c, n in TIMER_CIRCUITS.items()]
     entities.append(HolidaySensor(coordinator, entry.entry_id))
     entities.append(ShowerStatusSensor(coordinator, entry.entry_id, entry.runtime_data.shower))
+    entities.append(PresenceStatusSensor(coordinator, entry.entry_id, entry.runtime_data.presence))
     entities += [
         OilUsageSensor(coordinator, entry.entry_id, "oil_used_hc", "Heizölverbrauch Heizen (Brenner)", "hc"),
         OilUsageSensor(coordinator, entry.entry_id, "oil_used_hwc", "Heizölverbrauch Warmwasser (Brenner)", "hwc"),

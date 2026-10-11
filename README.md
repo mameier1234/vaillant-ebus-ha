@@ -6,7 +6,7 @@ Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung �
 Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
 Solar (Resol) ist bewusst nicht enthalten.
 
-## Stand 0.9 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
+## Stand 0.10 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
 - **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
   Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
 - **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
@@ -16,6 +16,11 @@ Solar (Resol) ist bewusst nicht enthalten.
 - **Brenner & Heizöl:** Laufzeit und Starts getrennt für Heizen und Warmwasser (Starts exakt = Hunderter-Zähler + Rest), daraus Heizölverbrauch
   (Δ Stunden × *Brenner Durchsatz*, L/h, Schätzwert – mit Düse/Kesselleistung abgleichen). Die Summen laufen inkrementell, eine spätere
   Änderung des Durchsatzes schreibt die Vergangenheit nicht um.
+- **Warmwasser-Pause bei Abwesenheit:** Schalter *Anwesenheitserkennung Warmwasser* (Standard aus), Auswahl der Personen unter
+  *Integration → Konfigurieren*, Wartezeit *Abwesend ab* (Standard 20 min). Sind **alle** gewählten Personen so lange nicht zuhause
+  (`unknown`/`unavailable` zählt als zuhause), wird für *heute* das Pufferladungs-Programm geleert und die Zirkulation auf `off` gestellt.
+  Rückkehr, Tageswechsel, Ausschalten der Erkennung oder ein HA-Neustart stellen alles aus dem gespeicherten Original wieder her.
+  Der Dusch-Wunsch hat Vorrang. Während der Pause sind Änderungen am heutigen Pufferladungs-Programm gesperrt. Heizkreis/Heizung bleiben unberührt.
 - **Brenner genau:** Brenner, Ladepumpe und *Puffer oben* werden alle 15 s frisch gelesen. Die Brennerlaufzeit wird zusätzlich
   **sekundengenau mitgezählt**, getrennt nach Heizen (Brenner an, Ladepumpe aus) und Warmwasser-Ladung (beide an); der Heizölverbrauch
   rechnet daraus × Durchsatz. Der Stundenzähler des Kessels (ganze Stunden) bleibt als eigener Sensor erhalten.
@@ -47,6 +52,8 @@ Dusch-Wunsch (Zirkulation + Pufferladung auf Anforderung), Zeitprogramm-Optimier
 ## Tests (lokal, ohne laufendes HA)
 ```bash
 python3 -m venv .venv && .venv/bin/pip install homeassistant
+
+.venv/bin/python tests/presence_logic.py     # Anwesenheits-Pause (10 Szenarien)
 .venv/bin/python tests/shower_logic.py       # Dusch-Wunsch-Ablauf mit simulierter Uhr (7 Szenarien + Neustart/Fehler)
 .venv/bin/python tests/smoke_entities.py     # alle Entitäten mit Testdaten instanziieren, Zustände prüfen
 .venv/bin/python tests/live_coordinator.py   # Koordinator gegen echten ebusd (nur lesend, IP/Port im Skript)

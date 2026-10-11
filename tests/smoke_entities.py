@@ -40,6 +40,10 @@ add("button", lambda: [button.QuickLoadButton(coord,E)])
 from custom_components.vaillant_ebus import shower
 mgr = MagicMock(); mgr.active = False; mgr.phase = "idle"; mgr.state = {}
 add("shower", lambda: [shower.ShowerSwitch(coord,E,mgr), shower.ShowerStatusSensor(coord,E,mgr)] + shower.shower_numbers(coord,E) + [shower.ShowerPauseSwitch(coord,E)])
+from custom_components.vaillant_ebus import presence
+pm = MagicMock(); pm.persons = ["person.a"]; pm.state = {}; pm.status = "anwesend"; pm.away_since = None
+coord.presence_enabled = False; coord.presence_delay_min = 20.0
+add("presence", lambda: [presence.PresenceSwitch(coord,E,pm), presence.PresenceDelayNumber(coord,E), presence.PresenceStatusSensor(coord,E,pm)])
 add("text", lambda: [schedule_editor.ScheduleSlotText(coord,E,c,n,s) for c,n in spec.TIMER_CIRCUITS.items() for s in range(3)])
 
 bad = 0; uids = set()
@@ -55,7 +59,7 @@ for e in ents:
         bad += 1; print(f"  FEHLER {name}: {type(ex).__name__}: {ex}"); traceback.print_exc(limit=2)
 print(f"\n{len(ents)} Entitaeten geprueft, {bad} Probleme")
 for e in ents:
-    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber","ShowerPauseSwitch","BurnerRuntimeSensor","OilUsageSensor"):
+    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber","ShowerPauseSwitch","BurnerRuntimeSensor","OilUsageSensor","PresenceSwitch","PresenceDelayNumber","PresenceStatusSensor"):
         e.hass = hass
         try: print(f"  {type(e).__name__:22} {e.unique_id[-28:]:28} -> {e.state!r}")
         except Exception as ex: print("  ", type(e).__name__, "state fehlt:", ex)

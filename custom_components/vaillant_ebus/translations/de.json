@@ -3,10 +3,27 @@
     "step": {
       "user": {
         "title": "Vaillant eBUS (ebusd)",
-        "data": { "host": "Host / IP des ebusd", "port": "TCP-Port" }
+        "data": {
+          "host": "Host / IP des ebusd",
+          "port": "TCP-Port"
+        }
       }
     },
-    "error": { "cannot_connect": "Keine Verbindung zu ebusd" },
-    "abort": { "already_configured": "Bereits eingerichtet" }
+    "error": {
+      "cannot_connect": "Keine Verbindung zu ebusd"
+    },
+    "abort": {
+      "already_configured": "Bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Warmwasser-Pause bei Abwesenheit",
+        "data": {
+          "persons": "Personen (Pause, wenn alle nicht zuhause sind)"
+        }
+      }
+    }
   }
 }
