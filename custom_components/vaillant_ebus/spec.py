@@ -98,6 +98,9 @@ WRITES: dict[str, tuple[str, str]] = {
     "ot_limit": ("mc", "SetShutdownTemp"),
     "buffer_target": ("hwc", "SetTempDesired"),
     "holiday_temp": ("ui", "RoomTempHoliday"),
+    "charge_pump_lag": ("hwc", "HwcLaggingTime2"),
+    "reload_delay": ("hwc", "HwcLoadingDelay2"),
+    "parallel_charging": ("hwc", "HcParallelStorageFillingEnabled2"),
 }
 QUICK_LOAD = ("mc", "load")  # Quick - WW Speicherladung (onoff)
 QUICK_PARTY = ("mc", "party")  # Quick - Party (onoff)

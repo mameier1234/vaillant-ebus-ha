@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
-from homeassistant.const import UnitOfTemperature
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -25,6 +25,7 @@ class NumberDef:
     decimals: int  # Format fuer ebusd
     unit: str | None = UnitOfTemperature.CELSIUS
     icon: str | None = None
+    config: bool = False  # Installateur-Parameter -> Konfigurationsbereich
 
 
 NUMBERS = (
@@ -34,6 +35,8 @@ NUMBERS = (
     NumberDef("ot_limit", "AT-Abschaltgrenze", 10, 35, 1, 0),
     NumberDef("buffer_target", "Puffer Solltemperatur", 40, 65, 1, 0),
     NumberDef("holiday_temp", "Raumsoll Ferien", 5, 25, 0.5, 1),
+    NumberDef("charge_pump_lag", "Ladepumpen-Nachlauf", 0, 10, 1, 0, UnitOfTime.MINUTES, "mdi:pump", True),
+    NumberDef("reload_delay", "Nachladeverzögerung", 0, 60, 1, 0, UnitOfTime.MINUTES, "mdi:timer-sand", True),
 )
 
 
@@ -55,6 +58,8 @@ class VaillantNumber(VaillantEntity, NumberEntity):
         self._attr_native_step = d.step
         self._attr_native_unit_of_measurement = d.unit
         self._attr_icon = d.icon
+        if d.config:
+            self._attr_entity_category = EntityCategory.CONFIG
         if d.unit == UnitOfTemperature.CELSIUS:
             self._attr_device_class = NumberDeviceClass.TEMPERATURE
 

@@ -55,8 +55,6 @@ SENSORS = (
     SensorDef("flow_min", "Vorlauf Minimaltemperatur", T, C, 0, True),
     SensorDef("flow_max", "Vorlauf Maximaltemperatur", T, C, 0, True),
     SensorDef("preheat_max", "Max. Voraufheizung", None, UnitOfTime.HOURS, 0, True),
-    SensorDef("charge_pump_lag", "Ladepumpen-Nachlauf", None, UnitOfTime.MINUTES, 0, True),
-    SensorDef("reload_delay", "Nachladeverzögerung", None, UnitOfTime.MINUTES, 0, True),
     SensorDef("pre_shutdown", "Max. Vorabschaltung", None, UnitOfTime.MINUTES, 0, True),
     SensorDef("frost_delay", "Frostschutzverzögerung", None, UnitOfTime.HOURS, 0, True),
     SensorDef("temp_increase", "Temperaturüberhöhung", None, "K", 1, True),

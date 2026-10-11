@@ -29,7 +29,6 @@ BINARIES = (
     BinaryDef("charge_pump", "Ladepumpe Puffer", BinarySensorDeviceClass.RUNNING),
     BinaryDef("circulation_pump", "Zirkulationspumpe", BinarySensorDeviceClass.RUNNING),
     BinaryDef("holiday_active", "Ferienprogramm aktiv"),
-    BinaryDef("parallel_charging", "Parallele Ladung", None, True),
 )
 
 

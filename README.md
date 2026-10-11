@@ -6,15 +6,16 @@ Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung �
 Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
 Solar (Resol) ist bewusst nicht enthalten.
 
-## Stand 0.5.1 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
+## Stand 0.6 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
 - **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
   Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
 - **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
 - **Zahlen (schreibbar):** Raumsoll Tag, Absenktemperatur, Heizkurve, AT-Abschaltgrenze, Puffer-Soll, Raumsoll Ferien
 - **Auswahl:** Betriebsart Heizung (winter/summer), Pufferladung Modus (auto/off), Zirkulation Modus (auto/on/off)
 - **Zeitprogramme:** je Kreis (Heizung, Pufferladung, Zirkulation) ein Sensor (Zustand = heute, Attribute = alle Tage), eine Auswahl *Tag* (Heute, Mo–So, Mo–Fr, Sa–So) und drei Felder *Slot 1–3*, die den hinterlegten Wert zeigen (`07:30-22:00` oder `aus`) und editierbar sind. Eingabe wird geprüft, geschrieben und zurückgelesen. Dazu der Dienst `set_schedule`
-- **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Ladepumpen-Nachlauf, Nachladeverzögerung, Vorabschaltung,
-  Frostschutzverzögerung, Temperaturüberhöhung, Korrekturwerte, Brennerlaufzeit, Parallele Ladung
+- **Konfiguration (schreibbar):** Parallele Ladung (Schalter; AUS = Pufferladung hat Vorrang vor der Heizung), Ladepumpen-Nachlauf, Nachladeverzögerung
+- **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Vorabschaltung, Frostschutzverzögerung, Temperaturüberhöhung,
+  Korrekturwerte, Brennerlaufzeit
 - **Ungetestet, standardmäßig deaktiviert:** Switch *Party* (`mc party`), Button *Puffer einmalig laden* (`mc load`)
 
 ## Wichtige Erkenntnisse (gegen Display verifiziert)
