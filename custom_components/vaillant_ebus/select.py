@@ -28,13 +28,14 @@ class ModeDef:
 
 
 MODES = (
+    # 'on' bewusst nicht angeboten: hwc/cc SetMode=on hat auch andere Kreise auf Dauerbetrieb gesetzt
     # winter = Heizen (mc auto), summer = nur Warmwasser (mc off); Warmwasser bleibt unberuehrt
     ModeDef("season", "Betriebsart", SEASON_CIRCUIT, "SetMode",
             {"winter": "auto", "summer": "off"}, "mdi:sun-snowflake-variant"),
     ModeDef("hwc_mode", "Warmwasser Modus", "hwc", "SetMode",
-            {"auto": "auto", "on": "on", "off": "off"}, "mdi:water-boiler"),
+            {"auto": "auto", "off": "off"}, "mdi:water-boiler"),
     ModeDef("circulation_mode", "Zirkulation Modus", "cc", "SetMode",
-            {"auto": "auto", "on": "on", "off": "off"}, "mdi:pump"),
+            {"auto": "auto", "off": "off"}, "mdi:pump"),
 )
 
 

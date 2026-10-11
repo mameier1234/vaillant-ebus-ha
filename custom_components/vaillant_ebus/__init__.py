@@ -73,6 +73,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
             raise HomeAssistantError(str(err)) from err
 
     async def hot_water_override(call: ServiceCall) -> None:
+        # GESPERRT: hwc SetMode=on schaltet an der Anlage auch Zirkulation und Mischerkreis auf Dauerbetrieb
+        # (beobachtet 2026-10-11). Erst nach geklaerter Kopplung wieder freigeben.
+        raise HomeAssistantError("hot_water_override ist gesperrt (Nebenwirkung auf Heizkreis, siehe README)")
         if "until" in call.data:
             until = dt_util.as_utc(call.data["until"])
         else:

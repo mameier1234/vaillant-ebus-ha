@@ -19,3 +19,8 @@ ebusd muss den TCP-Port im LAN anbieten (`--address=0.0.0.0` o. ä.). Der Port i
 
 ## Geplant
 Wochenraster-Dashboardkarte, `water_heater`-Entität, Temperatur-Dashboard (nicht angeschlossene Fühler ausblenden), Tests.
+
+## Bekannte Einschränkung (0.3.1)
+`hwc SetMode on` setzte an der Anlage auch Zirkulation (`cc`) und Mischerkreis (`mc`) auf `on` (Dauerbetrieb).
+Deshalb: Dienst `hot_water_override` gesperrt, `on` in den Warmwasser-/Zirkulations-Auswahlfeldern nicht angeboten.
+Wochenend-/Dusch-Wunsch wird stattdessen über zeitlich begrenzte Zeitfenster umgesetzt (in Arbeit).
