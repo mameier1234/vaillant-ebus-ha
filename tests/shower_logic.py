@@ -49,9 +49,10 @@ class FakeHass:
     def async_create_task(self, coro): return asyncio.ensure_future(coro)
 
 async def run(label, start_local, top, program, *, warm_rate=0.5, actions=None, fail_writes=0, cc="auto"):
+    stores = {}
     sim = Sim(start_local); client = FakeClient(sim, top, cc, fail_writes)
     coord = FakeCoordinator(sim, client, program)
-    shower.Store = lambda *a, **k: FakeStore()
+    shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
     m = shower.ShowerManager(FakeHass(), coord)
     shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
     real_sleep = asyncio.sleep
@@ -93,6 +94,18 @@ async def main():
     # E) Aufheizen hoert nach max. Zeit auf, wenn der Puffer nicht warm wird
     m, c, co, s = await run("E) Puffer wird nicht warm (Zeitlimit)", L(11, 51), 36.0, P, warm_rate=0.0)
     assert not m.active and co.prog["Sunday"] == P and c.cc == "auto", "E fehlgeschlagen"
+    # I) Fensterlaenge richtet sich nach der Prognose
+    P2 = [("05:10", "11:00")]
+    m, c, co, s = await run("I1) leicht kalter Puffer (42 C): kurzes Fenster", L(11, 51), 42.0, P2, warm_rate=0.4)
+    end1 = co.writes[0][1][-1][1]
+    m, c, co, s = await run("I2) sehr kalter Puffer (36 C): volles Fenster", L(11, 51), 36.0, P2, warm_rate=0.4)
+    end2 = co.writes[0][1][-1][1]
+    print("  Fensterende 42 C:", end1, "| 36 C:", end2)
+    assert end1 <= "12:20" and end2 >= "12:30" and end1 < end2, "I: Fensterlaenge passt nicht zur Prognose"
+    # J) Heizrate wird aus echten Durchlaeufen gelernt (Simulation heizt mit 0.5 K/min)
+    m, c, co, s = await run("J) Heizrate lernen", L(11, 51), 36.0, P2, warm_rate=0.5)
+    print("  gelernte Rate:", m.rate, "(Start 0.35, beobachtet ca. 0.5)")
+    assert 0.38 < m.rate < 0.48, "J: Rate wurde nicht plausibel gelernt"
     # F) Fehler beim Zurueckstellen -> Wiederholung (echte Fehler: die naechsten 2 cc-Schreibzugriffe schlagen fehl)
     async def break_cc(m, sim, i):
         if i == 1: m._c.client.fail = 2
@@ -101,7 +114,7 @@ async def main():
     assert not m.active and c.cc == "auto", "F fehlgeschlagen (Wiederholung greift nicht)"
     # H) Neustart mitten im Lauf: neuer Manager setzt anhand des gespeicherten Zustands fort bzw. raeumt auf
     sim = Sim(L(11, 51)); client = FakeClient(sim, 36.0); coord = FakeCoordinator(sim, client, P)
-    store = FakeStore(); shower.Store = lambda *a, **k: store
+    stores = {}; shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
     shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
     real_sleep = asyncio.sleep
     async def hs(sec):

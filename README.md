@@ -20,7 +20,7 @@ Solar (Resol) ist bewusst nicht enthalten.
   Zirkulation 10 min, max. Aufheizzeit 45 min). Ablauf: Zirkulation per `cc SetMode on`; liegt *Puffer oben* unter der Schwelle und läuft
   gerade kein Ladefenster, wird für heute ein Zusatzfenster ins Pufferladungs-Programm geschrieben (der Regler lädt dann, getestet). Danach
   wird alles zurückgenommen (Zirkulation auf den vorherigen Modus, Zeitprogramm auf den Ursprung). Der Zustand wird gespeichert und nach
-  einem HA-Neustart aufgeräumt. **Der Regler speichert Zeitfenster nur in 10-Minuten-Schritten** (Start abwärts, Ende aufwärts gerundet).
+  einem HA-Neustart aufgeräumt. Die **Aufheizdauer wird prognostiziert** (Standard 0,35 K/min, aus echten Verläufen abgeleitet) und aus jedem Durchlauf nachgelernt; die Länge des Zusatzfensters richtet sich danach (Prognose × 1,5 + 10 min, mind. 20 min, höchstens die eingestellte Maximalzeit). **Der Regler speichert Zeitfenster nur in 10-Minuten-Schritten** (Start abwärts, Ende aufwärts gerundet).
 - **Konfiguration (schreibbar):** Parallele Ladung (Schalter; AUS = Pufferladung hat Vorrang vor der Heizung), Ladepumpen-Nachlauf, Nachladeverzögerung
 - **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Vorabschaltung, Frostschutzverzögerung, Temperaturüberhöhung,
   Korrekturwerte, Brennerlaufzeit

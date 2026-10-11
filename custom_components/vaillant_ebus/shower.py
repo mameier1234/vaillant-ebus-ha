@@ -37,6 +37,10 @@ _LOGGER = logging.getLogger(__name__)
 POLL_SECONDS = 20
 HYSTERESIS = 1.0  # Puffer gilt als warm genug ab Schwelle + 1 K
 LAST_END = "23:50"  # Fenster nie ueber Mitternacht schreiben
+DEFAULT_RATE = 0.35  # K/min Aufheizrate "Puffer oben" (aus Verlaufsdaten; wird aus echten Durchlaeufen gelernt)
+SAFETY = 1.5  # Fensterlaenge = Prognose * SAFETY + MARGIN
+MARGIN_MIN = 10
+MIN_WINDOW_MIN = 20
 
 
 class ShowerManager:
@@ -44,6 +48,8 @@ class ShowerManager:
         self._hass = hass
         self._c = coordinator
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.shower")
+        self._learn: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.shower_learn")
+        self.rate: float = DEFAULT_RATE
         self.state: dict[str, Any] = {}
         self._task: asyncio.Task | None = None
 
@@ -61,7 +67,34 @@ class ShowerManager:
         self._c.async_update_listeners()
 
     # --- Lebenszyklus ----------------------------------------------------------------
+    def eta_minutes(self, top: float | None, threshold: float) -> float | None:
+        """Prognose in Minuten bis 'Puffer oben' die Schwelle (+Hysterese) erreicht."""
+        if top is None:
+            return None
+        return max(0.0, threshold + HYSTERESIS - top) / self.rate
+
+    def _window_minutes(self, eta: float | None, heat_max: float) -> float:
+        if eta is None:
+            return heat_max
+        return min(heat_max, max(MIN_WINDOW_MIN, eta * SAFETY + MARGIN_MIN))
+
+    async def _learn_rate(self, top: float | None, now: datetime) -> None:
+        """Beobachtete Heizrate in den gelernten Wert einmitteln (nur bei plausiblen Daten)."""
+        t0, top0 = self.state.get("heat_start"), self.state.get("heat_start_top")
+        if top is None or t0 is None or top0 is None:
+            return
+        minutes = (now - dt_util.parse_datetime(t0)).total_seconds() / 60
+        rise = top - top0
+        if minutes >= 5 and rise >= 2:
+            obs = rise / minutes
+            if 0.05 <= obs <= 2.0:
+                self.rate = round(0.7 * self.rate + 0.3 * obs, 3)
+                await self._learn.async_save({"rate": self.rate})
+                _LOGGER.info("Dusch-Wunsch: Heizrate gelernt: %.2f K/min (beobachtet %.2f)", self.rate, obs)
+
     async def async_load(self) -> None:
+        learned = await self._learn.async_load() or {}
+        self.rate = float(learned.get("rate", DEFAULT_RATE))
         self.state = await self._store.async_load() or {}
         if self.state:
             _LOGGER.info("Dusch-Wunsch nach Neustart fortgesetzt (Phase %s)", self.phase)
@@ -83,11 +116,13 @@ class ShowerManager:
             }
             await client.write("cc", "SetMode", "on")
             if top is not None and top < thr:
-                st["phase"] = "heat"
-                st["heat_end"] = (now + timedelta(minutes=heat)).isoformat()
+                eta = self.eta_minutes(top, thr)
+                win = self._window_minutes(eta, heat)
+                st.update(phase="heat", heat_end=(now + timedelta(minutes=win)).isoformat(), eta_min=eta,
+                          heat_start=now.isoformat(), heat_start_top=top)
                 st.pop("circ_end")
                 self.state = st  # damit _open_window bei Fehlern sauber aufraeumen kann
-                st["window"] = await self._open_window(heat)
+                st["window"] = await self._open_window(win)
         except EbusdError as err:
             self.state = {}
             raise HomeAssistantError(f"Dusch-Wunsch konnte nicht gestartet werden: {err}") from err
@@ -171,8 +206,13 @@ class ShowerManager:
                     elif ph == "heat":
                         top = await self._top()
                         self.state["top"] = top
+                        eta = self.eta_minutes(top, self.state["threshold"])
+                        self.state["eta_min"] = None if eta is None else round(eta, 1)
                         heat_end = dt_util.parse_datetime(self.state["heat_end"])
-                        if (top is not None and top >= self.state["threshold"] + HYSTERESIS) or now >= heat_end:
+                        reached = top is not None and top >= self.state["threshold"] + HYSTERESIS
+                        if reached or now >= heat_end:
+                            if reached:
+                                await self._learn_rate(top, now)
                             await self._close_window()
                             self.state["phase"] = "circ"
                             self.state["circ_end"] = (now + timedelta(minutes=self.state["circ_min"])).isoformat()
@@ -209,7 +249,8 @@ class ShowerSwitch(VaillantEntity, SwitchEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         s = self._m.state
-        return {"phase": self._m.phase, "puffer_oben": s.get("top"), "schwelle": s.get("threshold")} if s else {}
+        return {"phase": self._m.phase, "puffer_oben": s.get("top"), "schwelle": s.get("threshold"),
+                "prognose_min": s.get("eta_min")} if s else {}
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._m.async_start()
@@ -242,6 +283,7 @@ class ShowerStatusSensor(VaillantEntity, SensorEntity):
             return {}
         end = s.get("heat_end") if self._m.phase == "heat" else s.get("circ_end")
         return {"ende": end, "puffer_oben": s.get("top"), "schwelle": s.get("threshold"),
+                "prognose_min": s.get("eta_min"), "heizrate_k_pro_min": self._m.rate,
                 "zusatzfenster": s.get("window", {}) and s["window"].get("slot")}
 
 
