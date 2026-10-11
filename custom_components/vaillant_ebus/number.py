@@ -14,6 +14,7 @@ from . import VaillantConfigEntry
 from .ebusd import EbusdError
 from .entity import VaillantEntity
 from .oil import NozzleFlowNumber
+from .shower import shower_numbers
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     async_add_entities(VaillantNumber(coordinator, entry.entry_id, d) for d in NUMBERS)
-    async_add_entities([NozzleFlowNumber(coordinator, entry.entry_id)])
+    async_add_entities([NozzleFlowNumber(coordinator, entry.entry_id), *shower_numbers(coordinator, entry.entry_id)])
 
 
 class VaillantNumber(VaillantEntity, NumberEntity):

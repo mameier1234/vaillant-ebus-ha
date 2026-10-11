@@ -15,6 +15,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import CONF_HOST, CONF_PORT, DOMAIN, SERVICE_SET_SCHEDULE
 from .coordinator import VaillantCoordinator
 from .ebusd import EbusdClient, EbusdError
+from .shower import ShowerManager
 from .spec import DAYS, TIMER_CIRCUITS
 
 PLATFORMS = [
@@ -48,6 +49,7 @@ SET_SCHEDULE_SCHEMA = vol.Schema(
 @dataclass
 class VaillantData:
     coordinator: VaillantCoordinator
+    shower: ShowerManager
 
 
 type VaillantConfigEntry = ConfigEntry[VaillantData]
@@ -57,7 +59,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
     client = EbusdClient(entry.data[CONF_HOST], entry.data[CONF_PORT])
     coordinator = VaillantCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
-    entry.runtime_data = VaillantData(coordinator)
+    shower = ShowerManager(hass, coordinator)
+    coordinator.shower = shower
+    entry.runtime_data = VaillantData(coordinator, shower)
 
     async def set_schedule(call: ServiceCall) -> None:
         """Schreibt jeden betroffenen Tag einzeln (daysel=selected) und liest zur Kontrolle zurueck."""
@@ -70,6 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
 
     hass.services.async_register(DOMAIN, SERVICE_SET_SCHEDULE, set_schedule, SET_SCHEDULE_SCHEMA)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await shower.async_load()  # nach den Plattformen: Parameter (number-Entitaeten) sind dann gesetzt
     return True
 
 

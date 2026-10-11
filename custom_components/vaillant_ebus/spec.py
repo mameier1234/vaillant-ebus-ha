@@ -184,3 +184,44 @@ def parse_slots(text: str) -> list[tuple[str, str]]:
             raise ValueError(f"Ungültige Uhrzeit in {part.strip()!r}")
         slots.append((f"{h1:02d}:{m1:02d}", f"{h2:02d}:{m2:02d}"))
     return slots
+
+
+# --- Zeit-Helfer (Regler speichert Zeitfenster nur in 10-Minuten-Schritten) --------------
+def to_min(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def to_hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def floor10(hhmm: str) -> str:
+    return to_hhmm(to_min(hhmm) // 10 * 10)
+
+
+def ceil10(hhmm: str) -> str:
+    return to_hhmm(-(-to_min(hhmm) // 10) * 10)
+
+
+def normalize_slot(start: str, end: str) -> tuple[str, str]:
+    """Start abwaerts, Ende aufwaerts auf 10 Minuten (Regler-Aufloesung); Ende hoechstens 24:00."""
+    e = min(to_min(ceil10(end)), 24 * 60)
+    return floor10(start), to_hhmm(e)
+
+
+def in_slots(slots: list[tuple[str, str]], hhmm: str) -> bool:
+    t = to_min(hhmm)
+    return any(to_min(a) <= t < to_min(b) for a, b in slots)
+
+
+def merge_slots(slots: list[tuple[str, str]], new: tuple[str, str]) -> list[tuple[str, str]]:
+    """Vereinigt ueberlappende/angrenzende Fenster; Ergebnis nach Startzeit sortiert."""
+    items = sorted((to_min(a), to_min(b)) for a, b in [*slots, new])
+    out: list[list[int]] = []
+    for a, b in items:
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [(to_hhmm(a), to_hhmm(b)) for a, b in out]

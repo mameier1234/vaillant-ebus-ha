@@ -6,7 +6,7 @@ Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung �
 Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
 Solar (Resol) ist bewusst nicht enthalten.
 
-## Stand 0.7 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
+## Stand 0.8 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
 - **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
   Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
 - **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
@@ -16,6 +16,11 @@ Solar (Resol) ist bewusst nicht enthalten.
 - **Brenner & Heizöl:** Laufzeit und Starts getrennt für Heizen und Warmwasser (Starts exakt = Hunderter-Zähler + Rest), daraus Heizölverbrauch
   (Δ Stunden × *Brenner Durchsatz*, L/h, Schätzwert – mit Düse/Kesselleistung abgleichen). Die Summen laufen inkrementell, eine spätere
   Änderung des Durchsatzes schreibt die Vergangenheit nicht um.
+- **Dusch-Wunsch:** Schalter `Dusch-Wunsch` (an = starten, aus = abbrechen), Status-Sensor und drei Einstellungen (Puffer-Schwelle 45 °C,
+  Zirkulation 10 min, max. Aufheizzeit 45 min). Ablauf: Zirkulation per `cc SetMode on`; liegt *Puffer oben* unter der Schwelle und läuft
+  gerade kein Ladefenster, wird für heute ein Zusatzfenster ins Pufferladungs-Programm geschrieben (der Regler lädt dann, getestet). Danach
+  wird alles zurückgenommen (Zirkulation auf den vorherigen Modus, Zeitprogramm auf den Ursprung). Der Zustand wird gespeichert und nach
+  einem HA-Neustart aufgeräumt. **Der Regler speichert Zeitfenster nur in 10-Minuten-Schritten** (Start abwärts, Ende aufwärts gerundet).
 - **Konfiguration (schreibbar):** Parallele Ladung (Schalter; AUS = Pufferladung hat Vorrang vor der Heizung), Ladepumpen-Nachlauf, Nachladeverzögerung
 - **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Vorabschaltung, Frostschutzverzögerung, Temperaturüberhöhung,
   Korrekturwerte, Brennerlaufzeit
@@ -38,6 +43,7 @@ Dusch-Wunsch (Zirkulation + Pufferladung auf Anforderung), Zeitprogramm-Optimier
 ## Tests (lokal, ohne laufendes HA)
 ```bash
 python3 -m venv .venv && .venv/bin/pip install homeassistant
+.venv/bin/python tests/shower_logic.py       # Dusch-Wunsch-Ablauf mit simulierter Uhr (7 Szenarien + Neustart/Fehler)
 .venv/bin/python tests/smoke_entities.py     # alle Entitäten mit Testdaten instanziieren, Zustände prüfen
 .venv/bin/python tests/live_coordinator.py   # Koordinator gegen echten ebusd (nur lesend, IP/Port im Skript)
 ```

@@ -16,6 +16,7 @@ from .ebusd import EbusdClient, EbusdError
 from .spec import (
     DAYS,
     HOLIDAY_PERIOD,
+    normalize_slot,
     ITEMS,
     TIMER_CIRCUITS,
     WRITES,
@@ -31,7 +32,7 @@ def format_schedule(slots: list[tuple[str, str]], daysel: str = "selected") -> s
     """[("05:10","11:00"), ...] -> "05:10;11:00;-:-;-:-;-:-;-:-;selected"."""
     if len(slots) > MAX_SLOTS:
         raise ValueError(f"max. {MAX_SLOTS} Zeitfenster")
-    ordered = sorted(slots)
+    ordered = sorted(normalize_slot(a, b) for a, b in slots)
     for (_, end), (start, _) in zip(ordered, ordered[1:]):
         if start < end:
             raise ValueError("Zeitfenster ueberlappen sich")
@@ -57,6 +58,10 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._raw: dict[tuple[str, str], list[str]] = {}
         self._last: dict[tuple[str, str], float] = {}
         self.edit_day: dict[str, str] = {}  # Kreis -> Auswahl aus DAY_OPTIONS
+        self.shower_threshold: float = 45.0  # Dusch-Wunsch: Puffer oben darunter -> aufheizen
+        self.shower_circ_min: float = 10.0  # Dusch-Wunsch: Zirkulation nach dem Aufheizen
+        self.shower_heat_max: float = 45.0  # Dusch-Wunsch: maximale Aufheizzeit
+        self.shower = None  # ShowerManager
         self.nozzle_lph: float = 2.5  # Brenner-Durchsatz in L/h (Schaetzwert, per number-Entitaet einstellbar)
         self._starts_max: dict[str, float] = {}
 
@@ -98,8 +103,9 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.client.write(circuit, f"Timer.{day}", payload)
         await self._read((circuit, f"Timer.{day}"), fresh=True, max_age=0)
         got = timer_slots(self._raw.get((circuit, f"Timer.{day}"), []))
-        if got != sorted(slots):
-            raise EbusdError(f"Zeitprogramm {circuit}/{day}: gelesen {got}, erwartet {sorted(slots)}")
+        expected = sorted(normalize_slot(a, b) for a, b in slots)
+        if got != expected:
+            raise EbusdError(f"Zeitprogramm {circuit}/{day}: gelesen {got}, erwartet {expected}")
         self.async_set_updated_data(self._build())
 
     def _build(self) -> dict[str, Any]:
@@ -116,7 +122,11 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data[f"burner_starts_{prefix}"] = total
         holiday = self._raw.get((HOLIDAY_PERIOD.circuit, HOLIDAY_PERIOD.message))
         data["holiday_period"] = holiday
-        data["schedules"] = {
+        data["schedules"] = self.build_schedules()
+        return data
+
+    def build_schedules(self) -> dict[str, dict[str, list[tuple[str, str]]]]:
+        return {
             circuit: {
                 day: timer_slots(self._raw.get((circuit, f"Timer.{day}"), []))
                 for day in DAYS
@@ -124,4 +134,3 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
             for circuit in TIMER_CIRCUITS
         }
-        return data

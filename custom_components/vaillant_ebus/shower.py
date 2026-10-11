@@ -1,0 +1,290 @@
+"""Dusch-Wunsch: Puffer bei Bedarf aufheizen und Zirkulation zeitlich begrenzt einschalten.
+
+Ablauf (alles zeitlich begrenzt, der Regler bleibt jederzeit der Chef):
+1. Zirkulation: ``cc SetMode on`` (isoliert getestet) - am Ende zurueck auf den vorherigen Modus.
+2. Liegt "Puffer oben" unter der Schwelle und laeuft gerade kein Pufferladungs-Fenster, wird fuer heute ein
+   Zusatzfenster in das Pufferladungs-Zeitprogramm geschrieben (Regler laedt dann, getestet). Das Fenster endet
+   von selbst; HA entfernt es zusaetzlich, sobald der Puffer warm genug ist, und stellt das Programm wieder her.
+3. Danach laeuft die Zirkulation noch einige Minuten, damit das heisse Wasser an der Dusche ankommt.
+
+Der Zustand wird gespeichert; nach einem HA-Neustart wird aufgeraeumt bzw. fortgesetzt.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime, timedelta
+import logging
+from typing import Any
+
+from homeassistant.components.number import NumberMode, RestoreNumber
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.switch import SwitchEntity
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
+
+from .const import DOMAIN
+from .coordinator import VaillantCoordinator
+from .ebusd import EbusdError
+from .entity import VaillantEntity
+from .spec import DAYS, in_slots, merge_slots, normalize_slot
+
+_LOGGER = logging.getLogger(__name__)
+
+POLL_SECONDS = 20
+HYSTERESIS = 1.0  # Puffer gilt als warm genug ab Schwelle + 1 K
+LAST_END = "23:50"  # Fenster nie ueber Mitternacht schreiben
+
+
+class ShowerManager:
+    def __init__(self, hass: HomeAssistant, coordinator: VaillantCoordinator) -> None:
+        self._hass = hass
+        self._c = coordinator
+        self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.shower")
+        self.state: dict[str, Any] = {}
+        self._task: asyncio.Task | None = None
+
+    # --- Zustand ---------------------------------------------------------------------
+    @property
+    def active(self) -> bool:
+        return bool(self.state)
+
+    @property
+    def phase(self) -> str:
+        return self.state.get("phase", "idle")
+
+    async def _save(self) -> None:
+        await self._store.async_save(self.state)
+        self._c.async_update_listeners()
+
+    # --- Lebenszyklus ----------------------------------------------------------------
+    async def async_load(self) -> None:
+        self.state = await self._store.async_load() or {}
+        if self.state:
+            _LOGGER.info("Dusch-Wunsch nach Neustart fortgesetzt (Phase %s)", self.phase)
+            self._task = self._hass.async_create_task(self._run())
+
+    async def async_start(self) -> None:
+        if self.active:
+            return
+        client = self._c.client
+        try:
+            prev = (await client.read("cc", "Mode", fresh=True))[1]
+            top = await self._top()
+            now = dt_util.utcnow()
+            thr, circ, heat = self._c.shower_threshold, self._c.shower_circ_min, self._c.shower_heat_max
+            st: dict[str, Any] = {
+                "prev_cc": prev, "start": now.isoformat(), "threshold": thr, "circ_min": circ,
+                "heat_max": heat, "window": None, "phase": "circ", "top": top,
+                "circ_end": (now + timedelta(minutes=circ)).isoformat(),
+            }
+            await client.write("cc", "SetMode", "on")
+            if top is not None and top < thr:
+                st["phase"] = "heat"
+                st["heat_end"] = (now + timedelta(minutes=heat)).isoformat()
+                st.pop("circ_end")
+                self.state = st  # damit _open_window bei Fehlern sauber aufraeumen kann
+                st["window"] = await self._open_window(heat)
+        except EbusdError as err:
+            self.state = {}
+            raise HomeAssistantError(f"Dusch-Wunsch konnte nicht gestartet werden: {err}") from err
+        self.state = st
+        await self._save()
+        self._task = self._hass.async_create_task(self._run())
+
+    async def async_cancel(self) -> None:
+        if not self.active:
+            return
+        if self._task:
+            self._task.cancel()
+            self._task = None
+        await self._finish()
+
+    # --- Hilfen ----------------------------------------------------------------------
+    async def _top(self) -> float | None:
+        try:
+            tok = await self._c.client.read("hwc", "Storage1Sensor2", fresh=True)
+            if len(tok) > 1 and tok[1] != "ok":
+                return None
+            return float(tok[0])
+        except (EbusdError, ValueError):
+            return None
+
+    async def _open_window(self, heat_min: float) -> dict[str, Any] | None:
+        local = dt_util.now()
+        day = DAYS[local.weekday()]
+        await self._c._read(("hwc", f"Timer.{day}"), fresh=True, max_age=0)
+        orig = list(self._c.build_schedules().get("hwc", {}).get(day, []))
+        hhmm = local.strftime("%H:%M")
+        if in_slots(orig, hhmm):
+            return None  # laeuft ohnehin ein Ladefenster
+        end_local = local + timedelta(minutes=heat_min)
+        end = LAST_END if end_local.date() != local.date() else min(end_local.strftime("%H:%M"), LAST_END)
+        start, end = normalize_slot(hhmm, end)
+        end = min(end, LAST_END)
+        if start >= end:
+            return None
+        merged = merge_slots(orig, (start, end))
+        if len(merged) > 3:
+            _LOGGER.warning("Dusch-Wunsch: Pufferladungs-Programm hat keinen freien Slot")
+            return None
+        await self._c.async_write_schedule("hwc", day, merged)
+        return {"day": day, "orig": [list(x) for x in orig], "slot": [start, end]}
+
+    async def _close_window(self) -> None:
+        w = self.state.get("window")
+        if not w:
+            return
+        await self._c.async_write_schedule("hwc", w["day"], [tuple(x) for x in w["orig"]])
+        self.state["window"] = None
+
+    async def _finish(self) -> None:
+        """Alles zuruecknehmen; bei Fehlern Zustand behalten, der Lauf versucht es weiter."""
+        try:
+            await self._close_window()
+            prev = self.state.get("prev_cc", "auto")
+            await self._c.client.write("cc", "SetMode", prev if prev in ("auto", "on", "off") else "auto")
+        except EbusdError as err:
+            _LOGGER.warning("Dusch-Wunsch: Aufraeumen fehlgeschlagen (%s), neuer Versuch", err)
+            self.state["phase"] = "finish"
+            await self._save()
+            if not self._task:
+                self._task = self._hass.async_create_task(self._run())
+            return
+        self.state = {}
+        await self._save()
+
+    # --- Hauptschleife ---------------------------------------------------------------
+    async def _run(self) -> None:
+        try:
+            while self.state:
+                now = dt_util.utcnow()
+                ph = self.phase
+                try:
+                    if ph == "finish":
+                        await self._finish()
+                        if not self.state:
+                            return
+                    elif ph == "heat":
+                        top = await self._top()
+                        self.state["top"] = top
+                        heat_end = dt_util.parse_datetime(self.state["heat_end"])
+                        if (top is not None and top >= self.state["threshold"] + HYSTERESIS) or now >= heat_end:
+                            await self._close_window()
+                            self.state["phase"] = "circ"
+                            self.state["circ_end"] = (now + timedelta(minutes=self.state["circ_min"])).isoformat()
+                            await self._save()
+                    elif ph == "circ":
+                        if now >= dt_util.parse_datetime(self.state["circ_end"]):
+                            await self._finish()
+                            if not self.state:
+                                return
+                except EbusdError as err:
+                    _LOGGER.warning("Dusch-Wunsch: %s", err)
+                self._c.async_update_listeners()
+                await asyncio.sleep(POLL_SECONDS)
+        except asyncio.CancelledError:
+            raise
+
+
+# --- Entitaeten ------------------------------------------------------------------------
+class ShowerSwitch(VaillantEntity, SwitchEntity):
+    _attr_icon = "mdi:shower-head"
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, manager: ShowerManager) -> None:
+        super().__init__(coordinator, entry_id, "shower_request", "Dusch-Wunsch")
+        self._m = manager
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self._m.active
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        s = self._m.state
+        return {"phase": self._m.phase, "puffer_oben": s.get("top"), "schwelle": s.get("threshold")} if s else {}
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._m.async_start()
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._m.async_cancel()
+
+
+class ShowerStatusSensor(VaillantEntity, SensorEntity):
+    _attr_icon = "mdi:shower"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["bereit", "aufheizen", "zirkulation", "aufraeumen"]
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, manager: ShowerManager) -> None:
+        super().__init__(coordinator, entry_id, "shower_status", "Dusch-Wunsch Status")
+        self._m = manager
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return {"idle": "bereit", "heat": "aufheizen", "circ": "zirkulation", "finish": "aufraeumen"}[self._m.phase]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        s = self._m.state
+        if not s:
+            return {}
+        end = s.get("heat_end") if self._m.phase == "heat" else s.get("circ_end")
+        return {"ende": end, "puffer_oben": s.get("top"), "schwelle": s.get("threshold"),
+                "zusatzfenster": s.get("window", {}) and s["window"].get("slot")}
+
+
+class ShowerNumber(VaillantEntity, RestoreNumber):
+    _attr_mode = NumberMode.BOX
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, key: str, name: str, attr: str,
+                 default: float, vmin: float, vmax: float, step: float, unit: str, icon: str) -> None:
+        super().__init__(coordinator, entry_id, key, name)
+        self._attr_name = name
+        self._attr_native_min_value, self._attr_native_max_value, self._attr_native_step = vmin, vmax, step
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon
+        self._val_attr = attr
+        self._value = default
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_number_data()) and last.native_value is not None:
+            self._value = float(last.native_value)
+        setattr(self.coordinator, self._val_attr, self._value)
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> float:
+        return self._value
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._value = value
+        setattr(self.coordinator, self._val_attr, value)
+        self.async_write_ha_state()
+
+
+def shower_numbers(coordinator: VaillantCoordinator, entry_id: str) -> list[ShowerNumber]:
+    return [
+        ShowerNumber(coordinator, entry_id, "shower_threshold", "Dusch-Wunsch Puffer-Schwelle", "shower_threshold",
+                     45, 30, 60, 1, UnitOfTemperature.CELSIUS, "mdi:thermometer-low"),
+        ShowerNumber(coordinator, entry_id, "shower_circ_min", "Dusch-Wunsch Zirkulation Dauer", "shower_circ_min",
+                     10, 2, 30, 1, UnitOfTime.MINUTES, "mdi:timer-outline"),
+        ShowerNumber(coordinator, entry_id, "shower_heat_max", "Dusch-Wunsch max. Aufheizzeit", "shower_heat_max",
+                     45, 10, 120, 5, UnitOfTime.MINUTES, "mdi:timer-sand"),
+    ]
