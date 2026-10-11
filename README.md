@@ -45,4 +45,4 @@ python3 -m venv .venv && .venv/bin/pip install homeassistant
 ## Dashboard-Karte (optional)
 `www/vaillant-schema-card.js` ist eine eigenständige Custom Card (`type: custom:vaillant-schema-card`) mit dem Live-Schema
 (Solar/Resol, Puffer, Kessel, Heizkreis, Pumpen). Als Dashboard-Ressource vom Typ *module* registrieren. Die Entitäten-IDs stehen
-oben in der Datei (`E = {...}`) und sind auf die Anlage des Entwicklers zugeschnitten. Klick auf einen Teil öffnet den Verlauf.
+oben in der Datei (`E = {...}`) und sind auf die Anlage des Entwicklers zugeschnitten. Klick auf einen Teil öffnet den Verlauf. Die Breite der Grafik ist begrenzt (Standard 720 px) und per `max_width: 600` in der Karten-Konfiguration einstellbar.

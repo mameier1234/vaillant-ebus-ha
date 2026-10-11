@@ -20,10 +20,11 @@ const OR = "#ff9800", RD = "#ff7043", GR = "#4caf50";
 class VaillantSchemaCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
+    this.style.setProperty("--vsc-max", (this._config.max_width || 720) + "px");
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this.shadowRoot.innerHTML =
-        "<style>:host{display:block}ha-card{padding:8px 12px}svg{width:100%;height:auto;display:block}.hot{cursor:pointer}</style><ha-card><div id='c'></div></ha-card>";
+        "<style>:host{display:block}ha-card{padding:8px 12px}#c{max-width:var(--vsc-max,720px);margin:0 auto}svg{width:100%;height:auto;display:block}.hot{cursor:pointer}</style><ha-card><div id='c'></div></ha-card>";
       this.shadowRoot.addEventListener("click", (ev) => {
         const t = ev.target.closest && ev.target.closest("[data-entity]");
         if (!t) return;
