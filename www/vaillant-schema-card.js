@@ -21,6 +21,14 @@ class VaillantSchemaCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this.style.setProperty("--vsc-max", (this._config.max_width || 720) + "px");
+    this._bp = this._config.mobile_breakpoint || 560;
+    if (!this._ro && typeof ResizeObserver !== "undefined") {
+      this._ro = new ResizeObserver(() => {
+        const m = this._isMobile();
+        if (m !== this._mobile) { this._mobile = m; this._last = null; if (this._hass) this.hass = this._hass; }
+      });
+      this._ro.observe(this);
+    }
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this.shadowRoot.innerHTML =
@@ -34,16 +42,25 @@ class VaillantSchemaCard extends HTMLElement {
   }
   set hass(hass) {
     this._hass = hass;
-    const svg = this._svg();
+    if (this._mobile === undefined) this._mobile = this._isMobile();
+    const svg = this._mobile ? this._svgMobile() : this._svg();
     if (svg !== this._last) {
       this._last = svg;
       this.shadowRoot.getElementById("c").innerHTML = svg;
     }
   }
+  disconnectedCallback() { if (this._ro) { this._ro.disconnect(); this._ro = null; } }
+  _isMobile() {
+    const l = this._config && this._config.layout;
+    if (l === "mobile") return true;
+    if (l === "desktop") return false;
+    const w = this.getBoundingClientRect().width;
+    return w > 0 && w < this._bp;
+  }
   getCardSize() { return 9; }
   static getStubConfig() { return {}; }
 
-  _svg() {
+  _ctx() {
     const st = this._hass.states;
     const S = (i) => st[i] && st[i].state;
     const N = (i) => { const v = parseFloat(S(i)); return isNaN(v) ? null : v; };
@@ -63,6 +80,12 @@ class VaillantSchemaCard extends HTMLElement {
     const dot = (x, y, r, on) => `<circle cx='${x}' cy='${y}' r='${r}' fill='${on ? GR : "var(--secondary-background-color)"}' stroke='var(--secondary-text-color)' stroke-width='.6'/>`;
     const box = (x, y, w, h, fill) => `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='8' fill='${fill || "var(--secondary-background-color)"}' stroke='var(--divider-color)' stroke-width='1'/>`;
     const tx = (x, y, s, c, a) => `<text x='${x}' y='${y}' class='${c}' text-anchor='${a || "middle"}' dominant-baseline='central'>${s}</text>`;
+
+    return { N, F, I, ON, RUN, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx };
+  }
+
+  _svg() {
+    const { N, F, I, ON, RUN, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='290' y='${y}' width='110' height='80' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(345, y + 30, F(t) + " °C", "z") + tx(345, y + 52, l, "zs") + hot(290, y, 110, 80, ent); };
 
     return `<svg viewBox='0 0 680 520' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
@@ -92,6 +115,37 @@ ${box(40, 430, 190, 48)}${tx(135, 447, "Wasserdruck", "s")}${tx(135, 466, F(N(E.
 ${box(245, 430, 190, 48)}${tx(340, 447, "Heizöl-Tank", "s")}${tx(340, 466, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(245, 430, 190, 48, E.tank)}
 ${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " Starts", "t")}${hot(450, 430, 190, 48, E.brennerH)}
 <text x='40' y='505' class='s'>Grün: Pumpe läuft · Leitungen animiert bei laufender Pumpe · Puffer: blau kühl bis rot warm · Antippen für den Verlauf</text>
+</svg>`;
+  }
+  _svgMobile() {
+    const { N, F, I, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
+    const zone = (y, ent, l) => { const t = N(ent); return `<rect x='10' y='${y}' width='130' height='60' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(75, y + 22, F(t) + " °C", "z") + tx(75, y + 42, l, "zs") + hot(10, y, 130, 60, ent); };
+    return `<svg viewBox='0 0 360 565' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+<g fill='none'>
+<line x1='95' y1='54' x2='95' y2='74' ${P(pS, OR)}/>
+<line x1='95' y1='118' x2='95' y2='150' ${P(pW, OR)}/>
+<line x1='140' y1='175' x2='160' y2='175' stroke='#888' stroke-width='1.5' opacity='.55'/>
+<line x1='140' y1='255' x2='160' y2='255' ${P(hp, RD)}/>
+<line x1='255' y1='310' x2='255' y2='295' ${P(hp, RD)}/>
+<line x1='160' y1='398' x2='140' y2='398' ${P(lp, RD)}/>
+<line x1='255' y1='370' x2='255' y2='380' ${P(lp, RD)}/>
+</g>
+${box(10, 10, 170, 44)}${tx(95, 26, "Kollektor", "t")}${tx(95, 44, F(N(E.kollektor)) + " °C · " + I(N(E.einstrahlung)) + " W/m²", "s")}${hot(10, 10, 170, 44, E.kollektor)}
+${box(190, 10, 160, 44)}${tx(270, 26, "Solarkreis", "t")}${tx(270, 44, "V " + F(N(E.vlSolar)) + " · R " + F(N(E.rlSolar)), "s")}${dot(204, 26, 5, pS)}${hot(190, 10, 160, 44, E.pumpeSolar)}
+${box(10, 74, 170, 44)}${tx(95, 90, "Wärmetauscher", "t")}${tx(95, 108, "V " + F(N(E.vlWT)) + " · R " + F(N(E.rlWT)), "s")}${hot(10, 74, 170, 44, E.vlWT)}
+${box(190, 74, 160, 44)}${tx(270, 90, "WT-Pumpe", "t")}${tx(270, 108, pW ? "läuft" : "aus", "s")}${dot(204, 90, 5, pW)}${hot(190, 74, 160, 44, E.pumpeWT)}
+${zone(150, E.pufferOben, "Oben (Fühler 1)")}${zone(210, E.pufferMitte, "Mitte (Resol)")}${zone(270, E.puffer4, "Fühler 4")}${zone(330, E.pufferUnten, "Unten (Fühler 2)")}
+<rect x='10' y='150' width='130' height='240' rx='6' fill='none' stroke='var(--primary-text-color)' stroke-width='1' opacity='.5'/>
+${box(160, 150, 190, 50)}${tx(255, 166, "Frischwasser", "t")}${tx(255, 184, "Zirkulation " + (zp ? "läuft" : "aus"), "s")}${dot(176, 166, 5, zp)}${hot(160, 150, 190, 50, E.zirk)}
+${box(160, 215, 190, 80)}${tx(255, 231, "Heizkreis", "t")}${tx(255, 249, "Vorlauf " + F(N(E.hkVL)) + " · Soll " + F(N(E.hkSoll), 0), "s")}${dot(176, 267, 5, hp)}<text x='188' y='271' class='s'>Pumpe ${hp ? "an" : "aus"}</text><text x='262' y='271' class='s'>Mischer ${mx}</text>${hot(160, 215, 190, 80, E.hkVL)}
+${box(160, 310, 190, 60, br ? "rgba(255,112,67,.28)" : null)}${tx(255, 328, "Kessel", "t")}${tx(255, 348, F(N(E.kesselVL)) + " °C · Brenner " + (br ? "läuft" : "aus"), "s")}${br ? `<path d='M330 366 Q324 356 330 346 Q332 354 337 356 Q340 350 336 344 Q348 352 343 366 Z' fill='${OR}'/>` : ""}${hot(160, 310, 190, 60, E.brenner)}
+${box(160, 380, 190, 36)}${tx(255, 398, "Ladepumpe " + (lp ? "läuft" : "aus"), "s")}${dot(176, 398, 5, lp)}${hot(160, 380, 190, 36, E.ladePumpe)}
+${box(10, 436, 170, 46)}${tx(95, 452, "Wasserdruck", "s")}${tx(95, 470, F(N(E.druck), 2) + " bar", "t")}${hot(10, 436, 170, 46, E.druck)}
+${box(190, 436, 160, 46)}${tx(270, 452, "Außen", "s")}${tx(270, 470, F(N(E.aussen)) + " °C", "t")}${hot(190, 436, 160, 46, E.aussen)}
+${box(10, 490, 170, 46)}${tx(95, 506, "Heizöl-Tank", "s")}${tx(95, 524, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(10, 490, 170, 46, E.tank)}
+${box(190, 490, 160, 46)}${tx(270, 506, "Brenner Heizen", "s")}${tx(270, 524, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " St.", "t")}${hot(190, 490, 160, 46, E.brennerH)}
+<text x='10' y='555' class='s'>Grün: Pumpe läuft · Puffer: blau kühl bis rot warm</text>
 </svg>`;
   }
 }
