@@ -5,13 +5,15 @@ from __future__ import annotations
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.start import async_at_started
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VaillantConfigEntry
 from .ebusd import EbusdError
 from .entity import VaillantEntity
-from .presence import PresenceSwitch
+from .presence import PresencePersonSwitch, PresenceSwitch
 from .shower import ShowerPauseSwitch, ShowerSwitch
 from .spec import QUICK_PARTY
 
@@ -27,6 +29,27 @@ async def async_setup_entry(
         ShowerPauseSwitch(coordinator, entry.entry_id),
         PresenceSwitch(coordinator, entry.entry_id, entry.runtime_data.presence),
     ])
+
+    known: set[str] = set()
+
+    @callback
+    def add_persons(_hass: HomeAssistant | None = None) -> None:
+        reg = er.async_get(hass)
+        ids = set(hass.states.async_entity_ids("person")) | {
+            e.entity_id for e in reg.entities.values() if e.domain == "person"
+        }
+        new = sorted(ids - known)
+        known.update(new)
+        ents = []
+        for pid in new:
+            st = hass.states.get(pid)
+            name = (st.attributes.get("friendly_name") if st else None) or pid.split(".", 1)[1].replace("_", " ").title()
+            ents.append(PresencePersonSwitch(coordinator, entry.entry_id, entry.runtime_data.presence, pid, name))
+        if ents:
+            async_add_entities(ents)
+
+    add_persons()
+    async_at_started(hass, add_persons)  # Personen, die erst nach dem Start geladen werden
 
 
 class PartySwitch(VaillantEntity, SwitchEntity):

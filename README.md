@@ -16,8 +16,8 @@ Solar (Resol) ist bewusst nicht enthalten.
 - **Brenner & Heizöl:** Laufzeit und Starts getrennt für Heizen und Warmwasser (Starts exakt = Hunderter-Zähler + Rest), daraus Heizölverbrauch
   (Δ Stunden × *Brenner Durchsatz*, L/h, Schätzwert – mit Düse/Kesselleistung abgleichen). Die Summen laufen inkrementell, eine spätere
   Änderung des Durchsatzes schreibt die Vergangenheit nicht um.
-- **Warmwasser-Pause bei Abwesenheit:** Schalter *Anwesenheitserkennung Warmwasser* (Standard aus), Auswahl der Personen unter
-  *Integration → Konfigurieren*, Wartezeit *Abwesend ab* (Standard 20 min). Sind **alle** gewählten Personen so lange nicht zuhause
+- **Warmwasser-Pause bei Abwesenheit:** Schalter *Anwesenheitserkennung Warmwasser* (Standard aus), Auswahl der Personen über je einen Schalter *Anwesenheit zählt: <Person>* (oder im Dashboard: Knopf *Personen*) –
+  Wartezeit *Abwesend ab* (Standard 20 min). Sind **alle** gewählten Personen so lange nicht zuhause
   (`unknown`/`unavailable` zählt als zuhause), wird für *heute* das Pufferladungs-Programm geleert und die Zirkulation auf `off` gestellt.
   Rückkehr, Tageswechsel, Ausschalten der Erkennung oder ein HA-Neustart stellen alles aus dem gespeicherten Original wieder her.
   Der Dusch-Wunsch hat Vorrang. Während der Pause sind Änderungen am heutigen Pufferladungs-Programm gesperrt. Heizkreis/Heizung bleiben unberührt.

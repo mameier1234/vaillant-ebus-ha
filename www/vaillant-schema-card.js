@@ -17,6 +17,8 @@ const E = {
   betrieb: "select.vaillant_heizung_betriebsart",
   dusch: "switch.heating_vaillant_heizung_dusch_wunsch",
   duschStatus: "sensor.heating_vaillant_heizung_dusch_wunsch_status",
+  anw: "switch.heating_vaillant_heizung_anwesenheitserkennung_warmwasser",
+  anwStatus: "sensor.heating_vaillant_heizung_anwesenheit_warmwasser_status",
 };
 const OR = "#ff9800", RD = "#ff7043", GR = "#4caf50";
 
@@ -35,11 +37,16 @@ class VaillantSchemaCard extends HTMLElement {
     if (!this.shadowRoot) {
       this.attachShadow({ mode: "open" });
       this.shadowRoot.innerHTML =
-        "<style>:host{display:block}ha-card{padding:8px 12px}#c{max-width:var(--vsc-max,720px);margin:0 auto}svg{width:100%;height:auto;display:block}.hot{cursor:pointer}</style><ha-card><div id='c'></div></ha-card>";
+        "<style>:host{display:block}ha-card{display:block;padding:8px 12px;position:relative}.dlg{position:absolute;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:5}.dlg>div{background:var(--card-background-color,#fff);color:var(--primary-text-color);border-radius:12px;padding:16px 20px;min-width:240px;max-width:90%}.dlg h3{margin:0 0 4px;font-size:16px}.dlg p{margin:0 0 10px;font-size:12px;color:var(--secondary-text-color)}.dlg label{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px;cursor:pointer}.dlg label small{color:var(--secondary-text-color)}.dlg button{margin-top:10px;float:right;border:0;border-radius:8px;padding:8px 16px;background:var(--primary-color);color:var(--text-primary-color,#fff);cursor:pointer}#c{max-width:var(--vsc-max,720px);margin:0 auto}svg{width:100%;height:auto;display:block}.hot{cursor:pointer}</style><ha-card><div id='c'></div><div id='d'></div></ha-card>";
       this.shadowRoot.addEventListener("click", (ev) => {
         const m = ev.target.closest && ev.target.closest("[data-set]");
         if (m) { this._setMode(m.dataset.set); return; }
         if (ev.target.closest && ev.target.closest("[data-shower]")) { this._toggleShower(); return; }
+        if (ev.target.closest && ev.target.closest("[data-anw]")) { this._toggleAnw(); return; }
+        if (ev.target.closest && ev.target.closest("[data-persons]")) { this._dlg = true; this._renderDlg(); return; }
+        const pc = ev.target.closest && ev.target.closest("[data-person-sw]");
+        if (pc) { this._hass.callService("switch", pc.checked ? "turn_on" : "turn_off", { entity_id: pc.dataset.personSw }); return; }
+        if (ev.target.dataset && ev.target.dataset.close) { this._dlg = false; this._renderDlg(); return; }
         const t = ev.target.closest && ev.target.closest("[data-entity]");
         if (!t) return;
         this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: t.dataset.entity } }));
@@ -54,6 +61,50 @@ class VaillantSchemaCard extends HTMLElement {
       this._last = svg;
       this.shadowRoot.getElementById("c").innerHTML = svg;
     }
+    if (this._dlg) this._renderDlg();
+  }
+  _persons() {
+    return Object.keys(this._hass.states).filter((k) => k.startsWith("switch.") && this._hass.states[k].attributes && this._hass.states[k].attributes.person)
+      .map((k) => this._hass.states[k]);
+  }
+  _renderDlg() {
+    const d = this.shadowRoot.getElementById("d");
+    if (!this._dlg) { d.innerHTML = ""; return; }
+    const ps = this._persons();
+    const key = JSON.stringify(ps.map((x) => [x.entity_id, x.state, x.attributes.person_status]));
+    if (d.dataset.k === key && d.innerHTML) return;
+    d.dataset.k = key;
+    const rows = ps.map((x) => `<label><input type='checkbox' data-person-sw='${x.entity_id}' ${x.state === "on" ? "checked" : ""}/>`
+      + `<span>${(x.attributes.friendly_name || x.entity_id).replace(/^.*?:\s*/, "")} <small>(${x.attributes.person_status === "home" ? "zuhause" : x.attributes.person_status === "not_home" ? "unterwegs" : x.attributes.person_status || "?"})</small></span></label>`).join("");
+    d.innerHTML = `<div class='dlg' data-close='1'><div><h3>Wer zählt für die Anwesenheit?</h3>`
+      + `<p>Warmwasser pausiert, wenn <b>alle</b> angehakten Personen weg sind.</p>${rows || "<p>Keine Personen (person.*) gefunden.</p>"}<button data-close='1'>Fertig</button></div></div>`;
+  }
+  _toggleAnw() {
+    const sw = this._hass && this._hass.states[E.anw];
+    if (!sw || sw.state === "unavailable") return;
+    this._hass.callService("switch", sw.state === "on" ? "turn_off" : "turn_on", { entity_id: E.anw });
+  }
+  _presenceBtn(x, y, w, h) {
+    const sw = this._hass.states[E.anw], ss = this._hass.states[E.anwStatus];
+    const on = !!sw && sw.state === "on";
+    const stt = ss && ss.state;
+    let label = "Anwesenheit aus", col = "var(--secondary-background-color)", cls = "pb";
+    if (on) {
+      cls = "pa";
+      if (stt === "pausiert") { label = "Warmwasser pausiert"; col = "#7e57c2"; cls = "pa2"; }
+      else if (stt === "abwesend") { label = "Abwesend – warte …"; col = "#ffc107"; }
+      else { label = "Anwesenheit an"; col = "#4caf50"; }
+    }
+    return `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='${h / 2}' fill='${col}' stroke='var(--divider-color)'/>`
+      + `<text x='${x + w / 2}' y='${y + h / 2}' class='${cls}' text-anchor='middle' dominant-baseline='central'>${label}</text>`
+      + `<rect class='hot' data-anw='1' x='${x}' y='${y}' width='${w}' height='${h}' fill='transparent'><title>Anwesenheitserkennung Warmwasser ein/aus</title></rect>`;
+  }
+  _personsBtn(x, y, w, h) {
+    const ps = this._persons();
+    const n = ps.filter((p) => p.state === "on").length;
+    return `<rect x='${x}' y='${y}' width='${w}' height='${h}' rx='${h / 2}' fill='var(--secondary-background-color)' stroke='var(--divider-color)'/>`
+      + `<text x='${x + w / 2}' y='${y + h / 2}' class='pb' text-anchor='middle' dominant-baseline='central'>Personen (${n}/${ps.length}) ▾</text>`
+      + `<rect class='hot' data-persons='1' x='${x}' y='${y}' width='${w}' height='${h}' fill='transparent'><title>Personen für die Anwesenheit wählen</title></rect>`;
   }
   disconnectedCallback() { if (this._ro) { this._ro.disconnect(); this._ro = null; } }
   _isMobile() {
@@ -141,11 +192,12 @@ class VaillantSchemaCard extends HTMLElement {
     const { N, F, I, ON, RUN, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='290' y='${y}' width='110' height='80' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(345, y + 30, F(t) + " °C", "z") + tx(345, y + 52, l, "zs") + hot(290, y, 110, 80, ent); };
 
-    return `<svg viewBox='0 0 680 556' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+    return `<svg viewBox='0 0 680 592' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pa2{font-size:13px;font-weight:500;fill:#fff}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
 ${this._pill(50, 4, 190, 28)}<text x='252' y='18' class='s' dominant-baseline='central'>Betriebsart Heizung</text>
 ${this._showerBtn(450, 4, 190, 28)}
-<g transform='translate(0,36)'>
+${this._presenceBtn(50, 38, 190, 28)}${this._personsBtn(450, 38, 190, 28)}
+<g transform='translate(0,72)'>
 <g fill='none'>
 <line x1='95' y1='150' x2='95' y2='133' ${P(pS, OR)}/><line x1='95' y1='115' x2='95' y2='82' ${P(pS, OR)}/><line x1='155' y1='82' x2='155' y2='150' ${P(pS, OR)}/>
 <line x1='200' y1='165' x2='236' y2='165' ${P(pW, OR)}/><line x1='254' y1='165' x2='290' y2='165' ${P(pW, OR)}/><line x1='290' y1='185' x2='200' y2='185' ${P(pW, OR)}/>
@@ -177,10 +229,11 @@ ${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(
   _svgMobile() {
     const { N, F, I, C, P, S, pS, pW, br, hp, lp, zp, mx, tank, hot, dot, box, tx } = this._ctx();
     const zone = (y, ent, l) => { const t = N(ent); return `<rect x='10' y='${y}' width='130' height='60' fill='${C(t)}' stroke='var(--divider-color)'/>` + tx(75, y + 22, F(t) + " °C", "z") + tx(75, y + 42, l, "zs") + hot(10, y, 130, 60, ent); };
-    return `<svg viewBox='0 0 360 609' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
-<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
+    return `<svg viewBox='0 0 360 647' xmlns='http://www.w3.org/2000/svg' role='img' aria-label='Heizungsschema'>
+<style>text{font-family:var(--primary-font-family,Roboto,sans-serif)}.t{font-size:14px;font-weight:500;fill:var(--primary-text-color)}.s{font-size:12px;fill:var(--secondary-text-color)}.z{font-size:14px;font-weight:500;fill:#1b1b1b}.zs{font-size:12px;fill:#1b1b1b}.pa{font-size:13px;font-weight:500;fill:#1b1b1b}.pa2{font-size:13px;font-weight:500;fill:#fff}.pn{font-size:13px;fill:var(--secondary-text-color)}.pb{font-size:13px;font-weight:500;fill:var(--primary-text-color)}.flow{stroke-dasharray:6 6;animation:fl 1s linear infinite}@keyframes fl{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.flow{animation:none}}</style>
 ${this._pill(10, 6, 170, 30)}${this._showerBtn(190, 6, 160, 30)}
-<g transform='translate(0,46)'>
+${this._presenceBtn(10, 44, 170, 30)}${this._personsBtn(190, 44, 160, 30)}
+<g transform='translate(0,84)'>
 <g fill='none'>
 <line x1='95' y1='54' x2='95' y2='74' ${P(pS, OR)}/>
 <line x1='95' y1='118' x2='95' y2='150' ${P(pW, OR)}/>

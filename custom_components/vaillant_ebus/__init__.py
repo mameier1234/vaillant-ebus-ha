@@ -66,7 +66,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
     presence = PresenceManager(hass, coordinator, entry.options.get(CONF_PERSONS, []))
     await presence.async_load()
     entry.runtime_data = VaillantData(coordinator, shower, presence)
-    entry.async_on_unload(entry.add_update_listener(_options_updated))
 
     async def set_schedule(call: ServiceCall) -> None:
         """Schreibt jeden betroffenen Tag einzeln (daysel=selected) und liest zur Kontrolle zurueck."""
@@ -82,10 +81,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> 
     await shower.async_load()  # nach den Plattformen: Parameter (number-Entitaeten) sind dann gesetzt
     presence.async_start()
     return True
-
-
-async def _options_updated(hass: HomeAssistant, entry: VaillantConfigEntry) -> None:
-    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: VaillantConfigEntry) -> bool:

@@ -40,14 +40,25 @@ class PresenceManager:
     def __init__(self, hass: HomeAssistant, coordinator: VaillantCoordinator, persons: list[str]) -> None:
         self._hass = hass
         self._c = coordinator
-        self.persons = list(persons)
+        self._selected: set[str] = set(persons)  # Startwert (Migration); danach aus dem Speicher
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.presence")
+        self._person_store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.presence_persons")
         self.state: dict[str, Any] = {}
         self.away_since: datetime | None = None
         self._unsubs: list[CALLBACK_TYPE] = []
         self._busy = False
 
     # --- Zustand ---------------------------------------------------------------------
+    @property
+    def persons(self) -> list[str]:
+        return sorted(self._selected)
+
+    async def async_set_person(self, person: str, on: bool) -> None:
+        (self._selected.add if on else self._selected.discard)(person)
+        await self._person_store.async_save({"persons": self.persons})
+        self._c.async_update_listeners()
+        await self.async_evaluate()
+
     @property
     def suspended(self) -> bool:
         return bool(self.state)
@@ -77,12 +88,16 @@ class PresenceManager:
 
     # --- Lebenszyklus ----------------------------------------------------------------
     async def async_load(self) -> None:
+        saved = await self._person_store.async_load()
+        if saved is not None:
+            self._selected = set(saved.get("persons", []))
         self.state = await self._store.async_load() or {}
         self._c.presence_suspended_day = self.state.get("day")
 
     def async_start(self) -> None:
-        if self.persons:
-            self._unsubs.append(async_track_state_change_event(self._hass, self.persons, self._person_changed))
+        known = set(self._hass.states.async_entity_ids("person")) | self._selected  # alle Personen beobachten, Auswahl filtert
+        if known:
+            self._unsubs.append(async_track_state_change_event(self._hass, sorted(known), self._person_changed))
         self._unsubs.append(
             async_track_time_interval(self._hass, self._tick, timedelta(seconds=CHECK_SECONDS))
         )
@@ -213,6 +228,37 @@ class PresenceSwitch(VaillantEntity, SwitchEntity, RestoreEntity):
         self.coordinator.presence_enabled = False
         self.async_write_ha_state()
         await self._m.async_evaluate()  # stellt ein bestehende Pause sofort zurueck
+
+
+class PresencePersonSwitch(VaillantEntity, SwitchEntity):
+    """Ein Schalter je Person: 'Anwesenheit dieser Person zaehlt' (Warmwasser-Pause gilt, wenn alle gewaehlten weg sind)."""
+
+    _attr_icon = "mdi:account-check"
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, manager: PresenceManager, person: str,
+                 name: str) -> None:
+        super().__init__(coordinator, entry_id, f"presence_person_{person.split('.', 1)[1]}", f"Anwesenheit zählt: {name}")
+        self._m = manager
+        self._person = person
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self._person in self._m.persons
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        st = self.hass.states.get(self._person) if self.hass else None
+        return {"person": self._person, "person_status": st.state if st else None}
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._m.async_set_person(self._person, True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._m.async_set_person(self._person, False)
 
 
 class PresenceDelayNumber(VaillantEntity, RestoreNumber):

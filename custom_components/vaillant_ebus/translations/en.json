@@ -15,15 +15,5 @@
     "abort": {
       "already_configured": "Already configured"
     }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Hot water pause when away",
-        "data": {
-          "persons": "People (pause when all are away)"
-        }
-      }
-    }
   }
 }

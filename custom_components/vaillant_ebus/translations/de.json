@@ -15,15 +15,5 @@
     "abort": {
       "already_configured": "Bereits eingerichtet"
     }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Warmwasser-Pause bei Abwesenheit",
-        "data": {
-          "persons": "Personen (Pause, wenn alle nicht zuhause sind)"
-        }
-      }
-    }
   }
 }
