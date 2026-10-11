@@ -121,7 +121,7 @@ class ScheduleSensor(VaillantEntity, SensorEntity):
         return self.coordinator.data.get("schedules", {}).get(self._circuit, {})
 
     @property
-    def value(self):
+    def data_value(self):
         return self._days or None
 
     @property

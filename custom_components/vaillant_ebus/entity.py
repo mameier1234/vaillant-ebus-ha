@@ -23,7 +23,7 @@ class VaillantEntity(CoordinatorEntity[VaillantCoordinator]):
         )
 
     @property
-    def value(self):
+    def data_value(self):
         return self.coordinator.data.get(self._key)
 
     @property
