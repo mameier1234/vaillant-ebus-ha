@@ -48,5 +48,5 @@ class VaillantBinary(VaillantEntity, BinarySensorEntity):
 
     @property
     def is_on(self) -> bool | None:
-        v = self.value
+        v = self.data_value
         return None if v is None else str(v).lower() in ON_VALUES

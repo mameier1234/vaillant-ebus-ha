@@ -28,4 +28,4 @@ class VaillantEntity(CoordinatorEntity[VaillantCoordinator]):
 
     @property
     def available(self) -> bool:
-        return super().available and self.value is not None
+        return super().available and self.data_value is not None

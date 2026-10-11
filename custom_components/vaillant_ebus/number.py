@@ -67,7 +67,7 @@ class VaillantNumber(VaillantEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        return self.value
+        return self.data_value
 
     async def async_set_native_value(self, value: float) -> None:
         try:

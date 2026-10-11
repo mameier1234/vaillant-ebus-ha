@@ -32,7 +32,7 @@ class PartySwitch(VaillantEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        v = self.value
+        v = self.data_value
         return None if v is None else str(v) == "1"
 
     async def _set(self, on: bool) -> None:
@@ -60,7 +60,7 @@ class ParallelChargingSwitch(VaillantEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        v = self.value
+        v = self.data_value
         return None if v is None else str(v).lower() in ("yes", "on", "1")
 
     async def _set(self, on: bool) -> None:

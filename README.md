@@ -34,3 +34,10 @@ ebusd muss den TCP-Port im LAN anbieten (`--address=0.0.0.0` o. ä.). Der Port i
 
 ## Geplant (Stufe 2, Logik)
 Dusch-Wunsch (Zirkulation + Pufferladung auf Anforderung), Zeitprogramm-Optimierung nach Anwesenheit, Wochenraster-Karte.
+
+## Tests (lokal, ohne laufendes HA)
+```bash
+python3 -m venv .venv && .venv/bin/pip install homeassistant
+.venv/bin/python tests/smoke_entities.py     # alle Entitäten mit Testdaten instanziieren, Zustände prüfen
+.venv/bin/python tests/live_coordinator.py   # Koordinator gegen echten ebusd (nur lesend, IP/Port im Skript)
+```

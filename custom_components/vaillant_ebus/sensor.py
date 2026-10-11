@@ -100,7 +100,7 @@ class VaillantSensor(VaillantEntity, SensorEntity):
 
     @property
     def native_value(self):
-        return self.value
+        return self.data_value
 
 
 def _fmt(slots: list[tuple[str, str]]) -> str:
@@ -151,7 +151,7 @@ class HolidaySensor(VaillantEntity, SensorEntity):
 
     @property
     def native_value(self) -> str | None:
-        v = self.value
+        v = self.data_value
         if not v or len(v) < 4:
             return None
         start, end = self._date(v[0]), self._date(v[2])
@@ -159,5 +159,5 @@ class HolidaySensor(VaillantEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        v = self.value or []
+        v = self.data_value or []
         return {f"zeitraum_{i + 1}": f"{v[2 * i]} – {v[2 * i + 1]}" for i in range(len(v) // 2)} if len(v) >= 4 else {}
