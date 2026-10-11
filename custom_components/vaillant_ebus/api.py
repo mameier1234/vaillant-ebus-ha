@@ -44,7 +44,7 @@ def format_schedule(slots: list[tuple[str, str]], block: str) -> str:
 
 
 class VaillantCoordinator(DataUpdateCoordinator[dict[str, str]]):
-    """Liest die Betriebsarten per ebusd (Cache max. 60 s)."""
+    """Liest die Betriebsarten frisch vom Bus (kein ebusd-Cache, sonst stale nach Schreibzugriffen)."""
 
     def __init__(self, hass: HomeAssistant, client: EbusdClient) -> None:
         super().__init__(
@@ -54,9 +54,9 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, str]]):
 
     async def _async_update_data(self) -> dict[str, str]:
         try:
-            hwc = await self.client.read("hwc", "Mode")  # temp0;hwcmode;...
-            cc = await self.client.read("cc", "Mode")
-            mc = await self.client.read(SEASON_CIRCUIT, "OperatingMode")  # mcmode
+            hwc = await self.client.read("hwc", "Mode", fresh=True)  # temp0;hwcmode;...
+            cc = await self.client.read("cc", "Mode", fresh=True)
+            mc = await self.client.read(SEASON_CIRCUIT, "OperatingMode", fresh=True)  # mcmode
         except EbusdError as err:
             raise UpdateFailed(str(err)) from err
         return {"hwc_mode": hwc[1], "circulation_mode": cc[1], "season": mc[0]}
