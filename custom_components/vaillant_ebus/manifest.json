@@ -4,10 +4,10 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/OWNER/vaillant-ebus-ha",
+  "documentation": "https://github.com/mameier1234/vaillant-ebus-ha",
   "integration_type": "service",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/OWNER/vaillant-ebus-ha/issues",
+  "issue_tracker": "https://github.com/mameier1234/vaillant-ebus-ha/issues",
   "requirements": [],
   "version": "0.2.0"
 }
