@@ -34,3 +34,20 @@ STORAGE_VERSION = 1
 SERVICE_SET_SCHEDULE = "set_schedule"
 SERVICE_HOT_WATER_OVERRIDE = "hot_water_override"
 SERVICE_CANCEL_OVERRIDE = "cancel_hot_water_override"
+
+# Lesezugriffe: Schluessel -> (Kreis, Nachricht, Feldindex)
+MODE_READS = {
+    "hwc_mode": ("hwc", "Mode", 1),
+    "circulation_mode": ("cc", "Mode", 1),
+    "season": (SEASON_CIRCUIT, "OperatingMode", 0),
+}
+# Temperaturen: Schluessel -> (Kreis, Nachricht, Anzeigename). Feld 0 = Wert, Feld 1 = Status
+# ("ok"; "cutoff" = Fuehler nicht angeschlossen -> Sensor nicht verfuegbar).
+TEMP_READS = {
+    "outside_temp": ("hc", "OutsideTemp", "Außentemperatur"),
+    "boiler_flow_temp": ("bai", "FlowTemp", "Kessel Vorlauf"),
+    "heating_flow_temp": ("hc", "SumFlowSensor", "Heizkreis Vorlauf"),
+    "mixer_flow_temp": ("mc", "FlowTemp", "Mischerkreis Vorlauf"),
+    "storage_temp": ("hwc", "Storage1Sensor2", "Warmwasserspeicher"),
+    "storage_target": ("hwc", "TempDesired2", "Warmwasserspeicher Soll"),
+}

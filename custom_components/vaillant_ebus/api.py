@@ -16,10 +16,11 @@ from .const import (
     BLOCK_DAYSEL,
     EMPTY_SLOT,
     MAX_SLOTS,
+    MODE_READS,
     SCAN_INTERVAL_SECONDS,
-    SEASON_CIRCUIT,
     STORAGE_KEY,
     STORAGE_VERSION,
+    TEMP_READS,
 )
 from .ebusd import EbusdClient, EbusdError
 
@@ -43,8 +44,12 @@ def format_schedule(slots: list[tuple[str, str]], block: str) -> str:
     return ";".join(parts + [BLOCK_DAYSEL[block]])
 
 
-class VaillantCoordinator(DataUpdateCoordinator[dict[str, str]]):
-    """Liest die Betriebsarten frisch vom Bus (kein ebusd-Cache, sonst stale nach Schreibzugriffen)."""
+class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Liest Betriebsarten und Temperaturen frisch vom Bus (kein ebusd-Cache, sonst stale nach Schreibzugriffen).
+
+    Einzelne Fehler (z. B. Fuehler ``cutoff``) machen nur den jeweiligen Wert ``None``;
+    nur wenn *alle* Lesezugriffe scheitern, gilt die Aktualisierung als fehlgeschlagen.
+    """
 
     def __init__(self, hass: HomeAssistant, client: EbusdClient) -> None:
         super().__init__(
@@ -52,14 +57,31 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, str]]):
         )
         self.client = client
 
-    async def _async_update_data(self) -> dict[str, str]:
-        try:
-            hwc = await self.client.read("hwc", "Mode", fresh=True)  # temp0;hwcmode;...
-            cc = await self.client.read("cc", "Mode", fresh=True)
-            mc = await self.client.read(SEASON_CIRCUIT, "OperatingMode", fresh=True)  # mcmode
-        except EbusdError as err:
-            raise UpdateFailed(str(err)) from err
-        return {"hwc_mode": hwc[1], "circulation_mode": cc[1], "season": mc[0]}
+    async def _async_update_data(self) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        errors: list[str] = []
+
+        for key, (circuit, message, idx) in MODE_READS.items():
+            try:
+                data[key] = (await self.client.read(circuit, message, fresh=True))[idx]
+            except (EbusdError, IndexError) as err:
+                errors.append(str(err))
+                data[key] = None
+
+        for key, (circuit, message, _name) in TEMP_READS.items():
+            try:
+                parts = await self.client.read(circuit, message, fresh=True)
+                if len(parts) > 1 and parts[1] != "ok":
+                    data[key] = None  # z. B. cutoff
+                else:
+                    data[key] = float(parts[0])
+            except (EbusdError, ValueError) as err:
+                errors.append(str(err))
+                data[key] = None
+
+        if len(errors) == len(MODE_READS) + len(TEMP_READS):
+            raise UpdateFailed(errors[0])
+        return data
 
 
 class OverrideManager:

@@ -27,7 +27,7 @@ from .const import (
 )
 from .ebusd import EbusdClient, EbusdError
 
-PLATFORMS = [Platform.SELECT]
+PLATFORMS = [Platform.SELECT, Platform.SENSOR]
 
 TIME_RE = vol.Match(r"^([01]\d|2[0-3]):[0-5]\d$")
 SLOT = vol.Schema({vol.Required("from"): TIME_RE, vol.Required("to"): TIME_RE})

@@ -3,7 +3,8 @@
 Steuerung einer Vaillant-Heizung über **ebusd** (direkter TCP-Zugriff auf den Kommandoport, Standard 8888).
 Kein MQTT nötig; bestehende MQTT-Sensoren können parallel weiterlaufen.
 
-## Stand 0.2
+## Stand 0.3
+- `sensor`: Außentemperatur, Kessel-/Heizkreis-/Mischerkreis-Vorlauf, Warmwasserspeicher (Ist/Soll); nicht angeschlossene Fühler (`cutoff`) werden "nicht verfügbar"
 - `select`: **Betriebsart** (winter = Heizen, summer = nur Warmwasser), **Warmwasser Modus**, **Zirkulation Modus**
 - `vaillant_ebus.hot_water_override` – Warmwasser für X Stunden / bis Zeitpunkt auf „an“, danach automatisch zurück auf den vorherigen Modus (persistiert, überlebt HA-Neustart); `cancel_hot_water_override` bricht ab
 - `vaillant_ebus.set_schedule` – bis zu 3 Zeitfenster für `hwc`/`hc`/`mc`/`cc`, Block `weekdays` oder `weekend`

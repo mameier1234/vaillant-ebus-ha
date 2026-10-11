@@ -62,7 +62,7 @@ class VaillantModeSelect(CoordinatorEntity[VaillantCoordinator], SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return self._from_value.get(self.coordinator.data.get(self._mode.key, ""))
+        return self._from_value.get(self.coordinator.data.get(self._mode.key) or "")
 
     async def async_select_option(self, option: str) -> None:
         try:
