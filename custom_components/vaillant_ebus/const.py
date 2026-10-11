@@ -1,6 +1,13 @@
 """Konstanten fuer Vaillant eBUS Control."""
 
+import json
+from pathlib import Path
+
 DOMAIN = "vaillant_ebus"
+
+# Version aus der manifest.json, damit sie am Geraet in HA sichtbar ist (Einstellungen -> Geraete -> Firmware)
+VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8"))["version"]
+REPO_URL = "https://github.com/mameier1234/vaillant-ebus-ha"
 
 CONF_HOST = "host"
 CONF_PORT = "port"

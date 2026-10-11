@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, REPO_URL, VERSION
 from .coordinator import VaillantCoordinator
 
 
@@ -19,7 +19,7 @@ class VaillantEntity(CoordinatorEntity[VaillantCoordinator]):
         self._attr_unique_id = f"{entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry_id)}, name="Vaillant Heizung", manufacturer="Vaillant",
-            model="auroMATIC VRS 620",
+            model="auroMATIC VRS 620", sw_version=VERSION, configuration_url=REPO_URL,
         )
 
     @property

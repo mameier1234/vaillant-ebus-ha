@@ -6,7 +6,7 @@ Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung �
 Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
 Solar (Resol) ist bewusst nicht enthalten.
 
-## Stand 0.10 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
+## Stand 0.10.1 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte und Zeitprogramme schreibbar)
 - **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
   Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
 - **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
@@ -63,3 +63,6 @@ python3 -m venv .venv && .venv/bin/pip install homeassistant
 `www/vaillant-schema-card.js` ist eine eigenständige Custom Card (`type: custom:vaillant-schema-card`) mit dem Live-Schema
 (Solar/Resol, Puffer, Kessel, Heizkreis, Pumpen). Als Dashboard-Ressource vom Typ *module* registrieren. Die Entitäten-IDs stehen
 oben in der Datei (`E = {...}`) und sind auf die Anlage des Entwicklers zugeschnitten. Klick auf einen Teil öffnet den Verlauf. Oben links sitzt eine Umschalt-Pille *Winter | Sommer* (setzt `select.vaillant_heizung_betriebsart`, mit Rückfrage). Daneben ein Knopf *Dusch-Wunsch* (schaltet den Dusch-Wunsch-Schalter, zeigt Status und Restzeit). Die Breite der Grafik ist begrenzt (Standard 720 px) und per `max_width: 600` in der Karten-Konfiguration einstellbar. Bei schmalen Bildschirmen (unter 560 px, einstellbar mit `mobile_breakpoint`) wechselt die Karte automatisch auf eine hochkant-Anordnung für Handys; mit `layout: mobile` oder `layout: desktop` lässt sich das erzwingen.
+
+## Installierte Version erkennen
+In HA unter *Einstellungen → Geräte & Dienste → Vaillant eBUS → Gerät* steht die Version als **Firmware** (aus der `manifest.json`). Sie steht auch in HACS beim Repository.
