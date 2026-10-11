@@ -41,3 +41,8 @@ python3 -m venv .venv && .venv/bin/pip install homeassistant
 .venv/bin/python tests/smoke_entities.py     # alle Entitäten mit Testdaten instanziieren, Zustände prüfen
 .venv/bin/python tests/live_coordinator.py   # Koordinator gegen echten ebusd (nur lesend, IP/Port im Skript)
 ```
+
+## Dashboard-Karte (optional)
+`www/vaillant-schema-card.js` ist eine eigenständige Custom Card (`type: custom:vaillant-schema-card`) mit dem Live-Schema
+(Solar/Resol, Puffer, Kessel, Heizkreis, Pumpen). Als Dashboard-Ressource vom Typ *module* registrieren. Die Entitäten-IDs stehen
+oben in der Datei (`E = {...}`) und sind auf die Anlage des Entwicklers zugeschnitten. Klick auf einen Teil öffnet den Verlauf.
