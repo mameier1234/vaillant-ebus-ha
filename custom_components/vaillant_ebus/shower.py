@@ -1,11 +1,12 @@
 """Dusch-Wunsch: Puffer bei Bedarf aufheizen und Zirkulation zeitlich begrenzt einschalten.
 
 Ablauf (alles zeitlich begrenzt, der Regler bleibt jederzeit der Chef):
-1. Zirkulation: ``cc SetMode on`` (isoliert getestet) - am Ende zurueck auf den vorherigen Modus.
-2. Liegt "Puffer oben" unter der Schwelle und laeuft gerade kein Pufferladungs-Fenster, wird fuer heute ein
+1. Liegt "Puffer oben" unter der Schwelle und laeuft gerade kein Pufferladungs-Fenster, wird fuer heute ein
    Zusatzfenster in das Pufferladungs-Zeitprogramm geschrieben (Regler laedt dann, getestet). Das Fenster endet
    von selbst; HA entfernt es zusaetzlich, sobald der Puffer warm genug ist, und stellt das Programm wieder her.
-3. Danach laeuft die Zirkulation noch einige Minuten, damit das heisse Wasser an der Dusche ankommt.
+2. Erst wenn der Puffer oben warm genug ist (oder schon war), wird die Zirkulation eingeschaltet
+   (``cc SetMode on``, isoliert getestet) und nach kurzer Zeit auf den vorherigen Modus zurueckgestellt - damit
+   das heisse Wasser schnell an der Dusche ankommt, ohne lauwarmes Wasser im Kreis zu pumpen.
 
 Der Zustand wird gespeichert; nach einem HA-Neustart wird aufgeraeumt bzw. fortgesetzt.
 """
@@ -97,6 +98,7 @@ class ShowerManager:
         self.rate = float(learned.get("rate", DEFAULT_RATE))
         self.state = await self._store.async_load() or {}
         if self.state:
+            self.state.setdefault("cc_set", True)  # Zustand aus v0.8.0: Zirkulation lief von Anfang an
             _LOGGER.info("Dusch-Wunsch nach Neustart fortgesetzt (Phase %s)", self.phase)
             self._task = self._hass.async_create_task(self._run())
 
@@ -110,11 +112,10 @@ class ShowerManager:
             now = dt_util.utcnow()
             thr, circ, heat = self._c.shower_threshold, self._c.shower_circ_min, self._c.shower_heat_max
             st: dict[str, Any] = {
-                "prev_cc": prev, "start": now.isoformat(), "threshold": thr, "circ_min": circ,
+                "prev_cc": prev, "cc_set": False, "start": now.isoformat(), "threshold": thr, "circ_min": circ,
                 "heat_max": heat, "window": None, "phase": "circ", "top": top,
                 "circ_end": (now + timedelta(minutes=circ)).isoformat(),
             }
-            await client.write("cc", "SetMode", "on")
             if top is not None and top < thr:
                 eta = self.eta_minutes(top, thr)
                 win = self._window_minutes(eta, heat)
@@ -123,6 +124,9 @@ class ShowerManager:
                 st.pop("circ_end")
                 self.state = st  # damit _open_window bei Fehlern sauber aufraeumen kann
                 st["window"] = await self._open_window(win)
+            else:
+                await client.write("cc", "SetMode", "on")  # Puffer ist schon warm: gleich zirkulieren
+                st["cc_set"] = True
         except EbusdError as err:
             self.state = {}
             raise HomeAssistantError(f"Dusch-Wunsch konnte nicht gestartet werden: {err}") from err
@@ -180,8 +184,10 @@ class ShowerManager:
         """Alles zuruecknehmen; bei Fehlern Zustand behalten, der Lauf versucht es weiter."""
         try:
             await self._close_window()
-            prev = self.state.get("prev_cc", "auto")
-            await self._c.client.write("cc", "SetMode", prev if prev in ("auto", "on", "off") else "auto")
+            if self.state.get("cc_set"):
+                prev = self.state.get("prev_cc", "auto")
+                await self._c.client.write("cc", "SetMode", prev if prev in ("auto", "on", "off") else "auto")
+                self.state["cc_set"] = False
         except EbusdError as err:
             _LOGGER.warning("Dusch-Wunsch: Aufraeumen fehlgeschlagen (%s), neuer Versuch", err)
             self.state["phase"] = "finish"
@@ -214,9 +220,17 @@ class ShowerManager:
                             if reached:
                                 await self._learn_rate(top, now)
                             await self._close_window()
-                            self.state["phase"] = "circ"
-                            self.state["circ_end"] = (now + timedelta(minutes=self.state["circ_min"])).isoformat()
-                            await self._save()
+                            warm_enough = reached or (top is not None and top >= self.state["threshold"] - 3)
+                            if warm_enough:
+                                await self._c.client.write("cc", "SetMode", "on")
+                                self.state["cc_set"] = True
+                                self.state["phase"] = "circ"
+                                self.state["circ_end"] = (now + timedelta(minutes=self.state["circ_min"])).isoformat()
+                                await self._save()
+                            else:  # Puffer wurde nicht warm: lauwarmes Wasser nicht im Kreis pumpen
+                                await self._finish()
+                                if not self.state:
+                                    return
                     elif ph == "circ":
                         if now >= dt_util.parse_datetime(self.state["circ_end"]):
                             await self._finish()
@@ -326,7 +340,7 @@ def shower_numbers(coordinator: VaillantCoordinator, entry_id: str) -> list[Show
         ShowerNumber(coordinator, entry_id, "shower_threshold", "Dusch-Wunsch Puffer-Schwelle", "shower_threshold",
                      45, 30, 60, 1, UnitOfTemperature.CELSIUS, "mdi:thermometer-low"),
         ShowerNumber(coordinator, entry_id, "shower_circ_min", "Dusch-Wunsch Zirkulation Dauer", "shower_circ_min",
-                     10, 2, 30, 1, UnitOfTime.MINUTES, "mdi:timer-outline"),
+                     5, 2, 30, 1, UnitOfTime.MINUTES, "mdi:timer-outline"),
         ShowerNumber(coordinator, entry_id, "shower_heat_max", "Dusch-Wunsch max. Aufheizzeit", "shower_heat_max",
                      45, 10, 120, 5, UnitOfTime.MINUTES, "mdi:timer-sand"),
     ]

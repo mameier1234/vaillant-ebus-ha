@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from homeassistant.util import dt as dt_util
 from custom_components.vaillant_ebus import shower
 from custom_components.vaillant_ebus.ebusd import EbusdError
+REAL_SLEEP = asyncio.sleep  # Original festhalten (die Tests ueberschreiben asyncio.sleep)
 
 class Sim:
     def __init__(self, local_start):
@@ -55,7 +56,7 @@ async def run(label, start_local, top, program, *, warm_rate=0.5, actions=None, 
     shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
     m = shower.ShowerManager(FakeHass(), coord)
     shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
-    real_sleep = asyncio.sleep
+    real_sleep = REAL_SLEEP
     async def fake_sleep(s):
         sim.t += timedelta(seconds=s)
         loaded = bool(coord.prog["Sunday"]) and any(a <= sim.now().strftime("%H:%M") < b for a, b in coord.prog["Sunday"])
@@ -80,6 +81,8 @@ async def main():
     m, c, co, s = await run("A) kalter Puffer in der Luecke", L(11, 51), 36.0, P)
     assert not m.active and co.prog["Sunday"] == P and c.cc == "auto" and any(w[2:] == ("SetMode", "on") for w in c.log), "A fehlgeschlagen"
     assert len(co.writes) == 2, "A: erwartet 2 Fensterschreibzugriffe (setzen + wiederherstellen)"
+    t_on = [w[0] for w in c.log if w[2:] == ("SetMode", "on")][0]
+    assert t_on > co.writes[0][0], f"A: Zirkulation muss NACH dem Aufheizen starten (an um {t_on}, Fenster um {co.writes[0][0]})"
     # B) warm
     m, c, co, s = await run("B) warmer Puffer", L(11, 51), 50.0, P)
     assert not m.active and co.writes == [] and c.cc == "auto", "B fehlgeschlagen"
@@ -91,9 +94,11 @@ async def main():
         if i == 5 and m.active: await m.async_cancel()
     m, c, co, s = await run("D) Abbruch waehrend Aufheizen", L(11, 51), 36.0, P, actions=cancel_at, warm_rate=0.01)
     assert not m.active and co.prog["Sunday"] == P and c.cc == "auto", "D fehlgeschlagen"
+    assert c.log == [], "D: beim Abbruch in der Aufheizphase darf cc nie angefasst werden"
     # E) Aufheizen hoert nach max. Zeit auf, wenn der Puffer nicht warm wird
     m, c, co, s = await run("E) Puffer wird nicht warm (Zeitlimit)", L(11, 51), 36.0, P, warm_rate=0.0)
     assert not m.active and co.prog["Sunday"] == P and c.cc == "auto", "E fehlgeschlagen"
+    assert c.log == [], "E: wird der Puffer nicht warm, darf die Zirkulation nie starten"
     # I) Fensterlaenge richtet sich nach der Prognose
     P2 = [("05:10", "11:00")]
     m, c, co, s = await run("I1) leicht kalter Puffer (42 C): kurzes Fenster", L(11, 51), 42.0, P2, warm_rate=0.4)
@@ -116,7 +121,7 @@ async def main():
     sim = Sim(L(11, 51)); client = FakeClient(sim, 36.0); coord = FakeCoordinator(sim, client, P)
     stores = {}; shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
     shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
-    real_sleep = asyncio.sleep
+    real_sleep = REAL_SLEEP
     async def hs(sec):
         sim.t += timedelta(seconds=sec); await real_sleep(0)
     shower.asyncio.sleep = hs
@@ -135,5 +140,24 @@ async def main():
     # G) vorheriger Modus 'off' wird wiederhergestellt
     m, c, co, s = await run("G) vorher Zirkulation 'off'", L(11, 51), 50.0, P, cc="off")
     assert c.cc == "off", "G fehlgeschlagen"
+    # H2) Zustand aus v0.8.0 (ohne cc_set-Feld): cc war schon an und muss am Ende zurueckgestellt werden
+    sim = Sim(L(12, 6)); client = FakeClient(sim, 40.3, cc="on"); coord = FakeCoordinator(sim, client, [("05:10", "11:00"), ("12:00", "21:30")])
+    stores = {}; shower.Store = lambda hass, ver, key, **k: stores.setdefault(key, FakeStore())
+    shower.dt_util.utcnow, shower.dt_util.now = sim.utcnow, sim.now
+    old = {"prev_cc": "auto", "start": sim.t.isoformat(), "threshold": 45.0, "circ_min": 10.0, "heat_max": 45.0,
+           "window": {"day": "Sunday", "orig": [["05:10", "11:00"], ["13:00", "21:30"]], "slot": ["12:00", "13:00"]},
+           "phase": "heat", "top": 40.3, "heat_end": (sim.t + timedelta(minutes=45)).isoformat()}
+    stores["vaillant_ebus.shower"] = FakeStore(); stores["vaillant_ebus.shower"].data = old
+    real_sleep = REAL_SLEEP
+    async def hs2(sec):
+        sim.t += timedelta(seconds=sec); client.top += 0.5 * sec / 60; await real_sleep(0)
+    shower.asyncio.sleep = hs2
+    m3 = shower.ShowerManager(FakeHass(), coord); await m3.async_load()
+    for _ in range(400):
+        if not m3.active: break
+        await real_sleep(0)
+    print("\n=== H2) Zustand aus v0.8.0 wird fortgesetzt")
+    print("  Programm nachher:", coord.prog["Sunday"], "| cc:", client.cc, "| cc-Zugriffe:", client.log)
+    assert not m3.active and client.cc == "auto" and coord.prog["Sunday"] == [("05:10", "11:00"), ("13:00", "21:30")], "H2 fehlgeschlagen"
     print("\nALLE SZENARIEN BESTANDEN")
 asyncio.run(main())

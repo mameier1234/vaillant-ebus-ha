@@ -17,9 +17,10 @@ Solar (Resol) ist bewusst nicht enthalten.
   (Δ Stunden × *Brenner Durchsatz*, L/h, Schätzwert – mit Düse/Kesselleistung abgleichen). Die Summen laufen inkrementell, eine spätere
   Änderung des Durchsatzes schreibt die Vergangenheit nicht um.
 - **Dusch-Wunsch:** Schalter `Dusch-Wunsch` (an = starten, aus = abbrechen), Status-Sensor und drei Einstellungen (Puffer-Schwelle 45 °C,
-  Zirkulation 10 min, max. Aufheizzeit 45 min). Ablauf: Zirkulation per `cc SetMode on`; liegt *Puffer oben* unter der Schwelle und läuft
-  gerade kein Ladefenster, wird für heute ein Zusatzfenster ins Pufferladungs-Programm geschrieben (der Regler lädt dann, getestet). Danach
-  wird alles zurückgenommen (Zirkulation auf den vorherigen Modus, Zeitprogramm auf den Ursprung). Der Zustand wird gespeichert und nach
+  Zirkulation 5 min, max. Aufheizzeit 45 min). Ablauf: Liegt *Puffer oben* unter der Schwelle und läuft
+  gerade kein Ladefenster, wird für heute ein Zusatzfenster ins Pufferladungs-Programm geschrieben (der Regler lädt dann, getestet). **Erst wenn
+  der Puffer oben warm genug ist (oder schon war), läuft die Zirkulation per `cc SetMode on` kurz** (Standard 5 min), damit heißes Wasser schnell
+  oben ankommt. Wird der Puffer nicht warm, startet sie gar nicht. Danach wird alles zurückgenommen (Zirkulation auf den vorherigen Modus, Zeitprogramm auf den Ursprung). Der Zustand wird gespeichert und nach
   einem HA-Neustart aufgeräumt. Die **Aufheizdauer wird prognostiziert** (Standard 0,35 K/min, aus echten Verläufen abgeleitet) und aus jedem Durchlauf nachgelernt; die Länge des Zusatzfensters richtet sich danach (Prognose × 1,5 + 10 min, mind. 20 min, höchstens die eingestellte Maximalzeit). **Der Regler speichert Zeitfenster nur in 10-Minuten-Schritten** (Start abwärts, Ende aufwärts gerundet).
 - **Konfiguration (schreibbar):** Parallele Ladung (Schalter; AUS = Pufferladung hat Vorrang vor der Heizung), Ladepumpen-Nachlauf, Nachladeverzögerung
 - **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Vorabschaltung, Frostschutzverzögerung, Temperaturüberhöhung,
