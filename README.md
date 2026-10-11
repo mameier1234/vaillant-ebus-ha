@@ -1,26 +1,32 @@
 # Vaillant eBUS Control (Home Assistant, HACS)
 
-Steuerung einer Vaillant-Heizung über **ebusd** (direkter TCP-Zugriff auf den Kommandoport, Standard 8888).
-Kein MQTT nötig; bestehende MQTT-Sensoren können parallel weiterlaufen.
+Bildet die Bedienung eines **Vaillant auroMATIC (VRS 620)** über **ebusd** (direkter TCP-Zugriff, Standardport 8888) in
+Home Assistant ab. Kein MQTT nötig. Der Regler im Keller bleibt die Steuerung – ohne HA läuft die Heizung unverändert weiter.
 
-## Stand 0.3
-- `sensor`: Außentemperatur, Kessel-/Heizkreis-/Mischerkreis-Vorlauf, Warmwasserspeicher (Ist/Soll); nicht angeschlossene Fühler (`cutoff`) werden "nicht verfügbar"
-- `select`: **Betriebsart** (winter = Heizen, summer = nur Warmwasser), **Warmwasser Modus**, **Zirkulation Modus**
-- `vaillant_ebus.hot_water_override` – Warmwasser für X Stunden / bis Zeitpunkt auf „an“, danach automatisch zurück auf den vorherigen Modus (persistiert, überlebt HA-Neustart); `cancel_hot_water_override` bricht ab
-- `vaillant_ebus.set_schedule` – bis zu 3 Zeitfenster für `hwc`/`hc`/`mc`/`cc`, Block `weekdays` oder `weekend`
+Entwickelt für: Heizkreis HK2 (Mischerkreis, ebusd-Kreis `mc`), HK1 deaktiviert, Pufferspeicher mit Frischwasserstation.
+Solar (Resol) ist bewusst nicht enthalten.
 
-## Verifiziert (ebusd 23.3, Vaillant SOLSY/VRC)
-- `Mode` ist nur lesbar; geschrieben wird mit `write -c <kreis> SetMode <auto|on|off>` → Antwort `done`
-- `Timer.<Tag>` hat 7 Felder: `von;bis;von;bis;von;bis;daysel`; wirkt auf den ganzen Block (Mo-Fr / Sa-So)
-- Schreib-/Lesetest an echter Anlage: Zirkulation off → auto, Timer unverändert zurückgeschrieben
+## Stand 0.4 (alles aus der Reglerbedienung lesbar, wichtigste Sollwerte schreibbar)
+- **Sensoren:** Außentemperatur, Kessel-/Heizkreis-Vorlauf (Ist/Soll), Sammler Vorlauf (VF1), Anlagensollwert, Raumtemperatur (Regler),
+  Puffer oben / Mitte unten / unten, Wasserdruck, Mischerstatus
+- **Binär:** Brenner, Heizkreispumpe, Ladepumpe, Zirkulationspumpe, Ferienprogramm
+- **Zahlen (schreibbar):** Raumsoll Tag, Absenktemperatur, Heizkurve, AT-Abschaltgrenze, Puffer-Soll, Raumsoll Ferien
+- **Auswahl:** Betriebsart Heizung (winter/summer), Pufferladung Modus (auto/off), Zirkulation Modus (auto/on/off)
+- **Zeitprogramme:** je ein Sensor für Heizung, Pufferladung, Zirkulation (Zustand = heute, Attribute = alle Tage); Dienst `set_schedule`
+- **Diagnose (nur lesen):** Pumpensperrzeit, Vorlauf min/max, Ladepumpen-Nachlauf, Nachladeverzögerung, Vorabschaltung,
+  Frostschutzverzögerung, Temperaturüberhöhung, Korrekturwerte, Brennerlaufzeit, Parallele Ladung
+- **Ungetestet, standardmäßig deaktiviert:** Switch *Party* (`mc party`), Button *Puffer einmalig laden* (`mc load`)
+
+## Wichtige Erkenntnisse (gegen Display verifiziert)
+- Die echten Heizkreis-Parameter liefert `mc Params` (= Display B5/C2); `HeatingCurve`, `TempDesiredLow` u. a. zeigen abweichende Werte.
+  Geschrieben wird über `SetTempDesired`, `SetTempDesiredLow`, `SetHeatingCurve`, `SetShutdownTemp` (mc), `SetTempDesired` (hwc).
+- `Mode` ist nur lesbar; schreiben über `SetMode`. **`hwc SetMode on` setzt auch Zirkulation und Heizkreis auf Dauerbetrieb** – deshalb
+  nicht angeboten. `cc SetMode on` wirkt isoliert.
+- Zeitprogramm-Schreiben mit `daysel=selected` ändert nur den einen Tag (Mo–Fr/Sa–So-Blöcke bleiben sonst unberührt).
+- Der Regler hat eigene Schnellfunktionen: `mc load` (Quick – WW Speicherladung), `mc party`, `mc save` (Sparen bis).
 
 ## Voraussetzung
 ebusd muss den TCP-Port im LAN anbieten (`--address=0.0.0.0` o. ä.). Der Port ist unauthentifiziert – nur im Heimnetz.
 
-## Geplant
-Wochenraster-Dashboardkarte, `water_heater`-Entität, Temperatur-Dashboard (nicht angeschlossene Fühler ausblenden), Tests.
-
-## Bekannte Einschränkung (0.3.1)
-`hwc SetMode on` setzte an der Anlage auch Zirkulation (`cc`) und Mischerkreis (`mc`) auf `on` (Dauerbetrieb).
-Deshalb: Dienst `hot_water_override` gesperrt, `on` in den Warmwasser-/Zirkulations-Auswahlfeldern nicht angeboten.
-Wochenend-/Dusch-Wunsch wird stattdessen über zeitlich begrenzte Zeitfenster umgesetzt (in Arbeit).
+## Geplant (Stufe 2, Logik)
+Dusch-Wunsch (Zirkulation + Pufferladung auf Anforderung), Zeitprogramm-Optimierung nach Anwesenheit, Wochenraster-Karte.
