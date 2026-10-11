@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 
 from . import VaillantConfigEntry
 from .entity import VaillantEntity
+from .oil import OilUsageSensor
 from .spec import DAYS, TIMER_CIRCUITS
 
 C = UnitOfTemperature.CELSIUS
@@ -61,7 +62,12 @@ SENSORS = (
     SensorDef("boiler_temp_max", "Wärmeerzeuger Maximaltemperatur", T, C, 0, True),
     SensorDef("outside_correction", "Korrektur Außentemperatur", None, "K", 1, True),
     SensorDef("room_correction", "Korrektur Raumtemperatur", None, "K", 1, True),
-    SensorDef("burner_hours", "Brennerlaufzeit", SensorDeviceClass.DURATION, UnitOfTime.HOURS, 0, True,
+    SensorDef("burner_hours", "Brennerlaufzeit Heizen", SensorDeviceClass.DURATION, UnitOfTime.HOURS, 0, False,
+              SensorStateClass.TOTAL_INCREASING),
+    SensorDef("burner_hours_hwc", "Brennerlaufzeit Warmwasser", SensorDeviceClass.DURATION, UnitOfTime.HOURS, 0,
+              False, SensorStateClass.TOTAL_INCREASING),
+    SensorDef("burner_starts_hc", "Brennerstarts Heizen", None, None, 0, False, SensorStateClass.TOTAL_INCREASING),
+    SensorDef("burner_starts_hwc", "Brennerstarts Warmwasser", None, None, 0, False,
               SensorStateClass.TOTAL_INCREASING),
 )
 
@@ -73,6 +79,10 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [VaillantSensor(coordinator, entry.entry_id, d) for d in SENSORS]
     entities += [ScheduleSensor(coordinator, entry.entry_id, c, n) for c, n in TIMER_CIRCUITS.items()]
     entities.append(HolidaySensor(coordinator, entry.entry_id))
+    entities += [
+        OilUsageSensor(coordinator, entry.entry_id, "oil_used_hc", "Heizölverbrauch Heizen (Brenner)", "burner_hours"),
+        OilUsageSensor(coordinator, entry.entry_id, "oil_used_hwc", "Heizölverbrauch Warmwasser (Brenner)", "burner_hours_hwc"),
+    ]
     async_add_entities(entities)
 
 

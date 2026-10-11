@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import VaillantConfigEntry
 from .ebusd import EbusdError
 from .entity import VaillantEntity
+from .oil import NozzleFlowNumber
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data.coordinator
     async_add_entities(VaillantNumber(coordinator, entry.entry_id, d) for d in NUMBERS)
+    async_add_entities([NozzleFlowNumber(coordinator, entry.entry_id)])
 
 
 class VaillantNumber(VaillantEntity, NumberEntity):

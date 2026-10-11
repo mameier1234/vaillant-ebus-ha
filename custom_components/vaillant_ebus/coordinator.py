@@ -57,6 +57,8 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._raw: dict[tuple[str, str], list[str]] = {}
         self._last: dict[tuple[str, str], float] = {}
         self.edit_day: dict[str, str] = {}  # Kreis -> Auswahl aus DAY_OPTIONS
+        self.nozzle_lph: float = 2.5  # Brenner-Durchsatz in L/h (Schaetzwert, per number-Entitaet einstellbar)
+        self._starts_max: dict[str, float] = {}
 
     async def _read(self, key: tuple[str, str], *, fresh: bool, max_age: int) -> bool:
         try:
@@ -105,6 +107,13 @@ class VaillantCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for key, item in ITEMS.items():
             tokens = self._raw.get((item.circuit, item.message))
             data[key] = parse(item, tokens) if tokens else None
+        for prefix in ("hc", "hwc"):
+            hi, lo = data.get(f"{prefix}_starts_hundreds"), data.get(f"{prefix}_starts_low")
+            total = hi + lo if hi is not None and lo is not None else None
+            if total is not None:  # nie rueckwaerts: Hunderter-Uebertrag zwischen den zwei Lesungen
+                total = max(total, self._starts_max.get(prefix, total))
+                self._starts_max[prefix] = total
+            data[f"burner_starts_{prefix}"] = total
         holiday = self._raw.get((HOLIDAY_PERIOD.circuit, HOLIDAY_PERIOD.message))
         data["holiday_period"] = holiday
         data["schedules"] = {

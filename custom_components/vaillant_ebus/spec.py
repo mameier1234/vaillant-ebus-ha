@@ -82,6 +82,12 @@ ITEMS: dict[str, Item] = {
     "room_correction": Item("ui", "RoomTempOffset", interval=SLOW),
     "holiday_temp": Item("ui", "RoomTempHoliday", interval=SLOW),
     "burner_hours": Item("bai", "HcHours", interval=SLOW),
+    "burner_hours_hwc": Item("bai", "HwcHours", interval=SLOW),
+    # Brennerstarts = Hunderter-Zaehler + Rest (zusammen exakt); siehe Coordinator._build
+    "hc_starts_hundreds": Item("bai", "HcStarts", interval=SLOW),
+    "hc_starts_low": Item("bai", "HcUnderHundredStarts", interval=SLOW),
+    "hwc_starts_hundreds": Item("bai", "HwcStarts", interval=SLOW),
+    "hwc_starts_low": Item("bai", "HwcUnderHundredStarts", interval=SLOW),
 }
 
 # Ferienzeitraum: Text (4 Datumsfelder), kein numerischer Wert
