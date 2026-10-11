@@ -102,7 +102,7 @@ class VaillantSchemaCard extends HTMLElement {
     if (on && ss) {
       const a = ss.attributes || {};
       const mins = a.ende ? Math.max(0, Math.ceil((new Date(a.ende) - Date.now()) / 60000)) : null;
-      if (ss.state === "aufheizen") label = "Aufheizen" + (a.puffer_oben != null ? " · " + Number(a.puffer_oben).toFixed(1).replace(".", ",") + " °C" : "");
+      if (ss.state === "aufheizen") label = "Aufheizen" + (a.prognose_min != null ? " ~" + Math.max(1, Math.round(a.prognose_min)) + " min" : (a.puffer_oben != null ? " · " + Number(a.puffer_oben).toFixed(1).replace(".", ",") + " °C" : ""));
       else if (ss.state === "zirkulation") label = "Zirkulation" + (mins !== null ? " · " + mins + " min" : "");
       else label = "Aufräumen …";
     }
