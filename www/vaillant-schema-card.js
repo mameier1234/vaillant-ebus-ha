@@ -223,7 +223,7 @@ ${box(450, 330, 190, 56, br ? "rgba(255,112,67,.28)" : null)}${tx(545, 348, "Kes
 ${dot(425, 358, 9, lp)}${tx(425, 404, "Ladepumpe", "s")}${hot(414, 347, 22, 22, E.ladePumpe)}
 ${box(40, 430, 190, 48)}${tx(135, 447, "Wasserdruck", "s")}${tx(135, 466, F(N(E.druck), 2) + " bar", "t")}${hot(40, 430, 190, 48, E.druck)}
 ${box(245, 430, 190, 48)}${tx(340, 447, "Heizöl-Tank", "s")}${tx(340, 466, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(245, 430, 190, 48, E.tank)}
-${box(450, 430, 190, 48)}${tx(545, 447, "Brenner letzte 24 h (Heizen / WW)", "s")}${tx(545, 466, I(N(E.brennerSH)) + " / " + I(N(E.brennerSW)) + " Starts · " + F(N(E.brennerMH) === null || N(E.brennerMW) === null ? null : (N(E.brennerMH) + N(E.brennerMW)) / 60) + " h", "t")}${hot(450, 430, 190, 48, E.brennerSH)}
+${box(450, 430, 190, 48)}${tx(545, 447, "Brenner 24 h (Heizen / WW)", "s")}${tx(545, 466, I(N(E.brennerSH)) + " / " + I(N(E.brennerSW)) + " Starts · " + F(N(E.brennerMH) === null || N(E.brennerMW) === null ? null : (N(E.brennerMH) + N(E.brennerMW)) / 60) + " h", "t")}${hot(450, 430, 190, 48, E.brennerSH)}
 <text x='40' y='505' class='s'>Grün: Pumpe läuft · Leitungen animiert bei laufender Pumpe · Puffer: blau kühl bis rot warm · Antippen für den Verlauf</text>
 </g>
 </svg>`;
