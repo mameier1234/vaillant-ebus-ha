@@ -11,7 +11,8 @@ const E = {
   aussen: V + "aussentemperatur", kesselVL: V + "kessel_vorlauf",
   hkVL: V + "mischerkreis_vorlauf", hkSoll: V + "heizkreis_vorlauf_soll",
   druck: V + "wasserdruck_heizung", mischer: V + "mischer",
-  brennerH: V + "brennerlaufzeit", brennerS: V + "brennerstarts_heizen",
+  brennerSH: V + "brennerstarts_heizen_24_h", brennerSW: V + "brennerstarts_warmwasser_24_h",
+  brennerMH: V + "brennerlaufzeit_heizen_24_h", brennerMW: V + "brennerlaufzeit_warmwasser_24_h",
   brenner: B + "brenner", hkPumpe: B + "heizkreispumpe", ladePumpe: B + "ladepumpe_puffer",
   zirk: B + "zirkulationspumpe", tank: "sensor.heizoel_tanklevel",
   betrieb: "select.vaillant_heizung_betriebsart",
@@ -222,7 +223,7 @@ ${box(450, 330, 190, 56, br ? "rgba(255,112,67,.28)" : null)}${tx(545, 348, "Kes
 ${dot(425, 358, 9, lp)}${tx(425, 404, "Ladepumpe", "s")}${hot(414, 347, 22, 22, E.ladePumpe)}
 ${box(40, 430, 190, 48)}${tx(135, 447, "Wasserdruck", "s")}${tx(135, 466, F(N(E.druck), 2) + " bar", "t")}${hot(40, 430, 190, 48, E.druck)}
 ${box(245, 430, 190, 48)}${tx(340, 447, "Heizöl-Tank", "s")}${tx(340, 466, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(245, 430, 190, 48, E.tank)}
-${box(450, 430, 190, 48)}${tx(545, 447, "Brenner Heizen", "s")}${tx(545, 466, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " Starts", "t")}${hot(450, 430, 190, 48, E.brennerH)}
+${box(450, 430, 190, 48)}${tx(545, 447, "Brenner letzte 24 h (Heizen / WW)", "s")}${tx(545, 466, I(N(E.brennerSH)) + " / " + I(N(E.brennerSW)) + " Starts · " + F(N(E.brennerMH) === null || N(E.brennerMW) === null ? null : (N(E.brennerMH) + N(E.brennerMW)) / 60) + " h", "t")}${hot(450, 430, 190, 48, E.brennerSH)}
 <text x='40' y='505' class='s'>Grün: Pumpe läuft · Leitungen animiert bei laufender Pumpe · Puffer: blau kühl bis rot warm · Antippen für den Verlauf</text>
 </g>
 </svg>`;
@@ -257,7 +258,7 @@ ${box(160, 380, 190, 36)}${tx(255, 398, "Ladepumpe " + (lp ? "läuft" : "aus"), 
 ${box(10, 436, 170, 46)}${tx(95, 452, "Wasserdruck", "s")}${tx(95, 470, F(N(E.druck), 2) + " bar", "t")}${hot(10, 436, 170, 46, E.druck)}
 ${box(190, 436, 160, 46)}${tx(270, 452, "Außen", "s")}${tx(270, 470, F(N(E.aussen)) + " °C", "t")}${hot(190, 436, 160, 46, E.aussen)}
 ${box(10, 490, 170, 46)}${tx(95, 506, "Heizöl-Tank", "s")}${tx(95, 524, I(tank) + " L · " + (tank === null ? "–" : Math.round(tank / 100)) + " %", "t")}${hot(10, 490, 170, 46, E.tank)}
-${box(190, 490, 160, 46)}${tx(270, 506, "Brenner Heizen", "s")}${tx(270, 524, I(N(E.brennerH)) + " h · " + I(N(E.brennerS)) + " St.", "t")}${hot(190, 490, 160, 46, E.brennerH)}
+${box(190, 490, 160, 46)}${tx(270, 506, "Brenner 24 h (Heiz. / WW)", "s")}${tx(270, 524, I(N(E.brennerSH)) + " / " + I(N(E.brennerSW)) + " St. · " + F(N(E.brennerMH) === null || N(E.brennerMW) === null ? null : (N(E.brennerMH) + N(E.brennerMW)) / 60) + " h", "t")}${hot(190, 490, 160, 46, E.brennerSH)}
 <text x='10' y='555' class='s'>Grün: Pumpe läuft · Puffer: blau kühl bis rot warm</text>
 </g>
 </svg>`;

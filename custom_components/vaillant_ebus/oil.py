@@ -15,11 +15,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.number import NumberMode, RestoreNumber
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
+    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.const import EntityCategory, UnitOfVolume
@@ -97,6 +98,126 @@ class FlameIntegrator:
         self._prev_on = flame and (pump if self._cat == "hwc" else not pump)
         self._last = now
         return d
+
+
+WINDOW = timedelta(hours=24)
+
+
+class BurnerWindow:
+    """Brennerstarts und -laufzeit im gleitenden 24-h-Fenster fuer 'hc' (Heizen) oder 'hwc' (Ladung).
+
+    Intervalle [Start, Ende|None, gezaehlt]. Ein Brenner, der beim ersten Messwert nach HA-Start schon laeuft,
+    zaehlt nicht als Start (gezaehlt=False), seine Laufzeit aber schon.
+    """
+
+    def __init__(self, category: str) -> None:
+        self._cat = category
+        self._iv: list[list] = []
+        self._last: datetime | None = None
+
+    def update(self, data: dict[str, Any], now: datetime) -> None:
+        flame = str(data.get("flame")).lower() == "on"
+        pump = str(data.get("charge_pump")).lower() == "on"
+        on = flame and (pump if self._cat == "hwc" else not pump)
+        open_iv = bool(self._iv) and self._iv[-1][1] is None
+        gap = self._last is not None and (now - self._last).total_seconds() > MAX_GAP_SECONDS
+        if open_iv and (gap or not on):
+            self._iv[-1][1] = self._last if gap and self._last else now
+            open_iv = False
+        if on and not open_iv:
+            self._iv.append([now, None, self._last is not None and not gap])
+        self._last = now
+        cutoff = now - WINDOW
+        self._iv = [i for i in self._iv if i[1] is None or i[1] > cutoff]
+
+    def starts(self, now: datetime) -> int:
+        cutoff = now - WINDOW
+        return sum(1 for s, _e, counted in self._iv if counted and s >= cutoff)
+
+    def seconds(self, now: datetime) -> float:
+        cutoff = now - WINDOW
+        return sum(max(0.0, ((e or now) - max(s, cutoff)).total_seconds()) for s, e, _c in self._iv)
+
+    def dump(self) -> dict[str, Any]:
+        return {
+            "iv": [[s.isoformat(), e.isoformat() if e else None, c] for s, e, c in self._iv],
+            "last": self._last.isoformat() if self._last else None,
+        }
+
+    def load(self, raw: dict[str, Any]) -> None:
+        last = dt_util.parse_datetime(raw.get("last") or "")
+        for s, e, c in raw.get("iv") or []:
+            start, end = dt_util.parse_datetime(s), dt_util.parse_datetime(e) if e else None
+            if start is None:
+                continue
+            if end is None:
+                end = last or start  # nach HA-Neustart Ende unbekannt: letzter bekannter Zeitpunkt
+            self._iv.append([start, end, bool(c)])
+        # _last bleibt None: der erste Messwert nach dem Neustart zaehlt nicht als Start
+
+
+@dataclass
+class WindowExtra(ExtraStoredData):
+    raw: dict[str, Any]
+
+    def as_dict(self) -> dict[str, Any]:
+        return self.raw
+
+
+class BurnerStartsWindowSensor(VaillantEntity, RestoreSensor):
+    """Brennerstarts der letzten 24 Stunden (gleitend). Haelt auch den Verlauf ueber HA-Neustarts."""
+
+    _attr_icon = "mdi:fire-alert"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, key: str, name: str, window: BurnerWindow) -> None:
+        super().__init__(coordinator, entry_id, key, name)
+        self._win = window
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if extra := await self.async_get_last_extra_data():
+            self._win.load(extra.as_dict())
+
+    @property
+    def extra_restore_state_data(self) -> ExtraStoredData:
+        return WindowExtra(self._win.dump())
+
+    @property
+    def native_value(self) -> int:
+        return self._win.starts(dt_util.utcnow())
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._win.update(self.coordinator.data, dt_util.utcnow())
+        self.async_write_ha_state()
+
+
+class BurnerRuntimeWindowSensor(VaillantEntity, SensorEntity):
+    """Brennerlaufzeit der letzten 24 Stunden in Minuten (gleitend). Teilt sich das Fenster mit dem Starts-Sensor."""
+
+    _attr_icon = "mdi:timer-outline"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "min"
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: VaillantCoordinator, entry_id: str, key: str, name: str, window: BurnerWindow) -> None:
+        super().__init__(coordinator, entry_id, key, name)
+        self._win = window
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> float:
+        return round(self._win.seconds(dt_util.utcnow()) / 60, 1)
 
 
 class BurnerRuntimeSensor(VaillantEntity, RestoreSensor):

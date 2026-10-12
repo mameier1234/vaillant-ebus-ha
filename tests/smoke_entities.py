@@ -32,6 +32,8 @@ from custom_components.vaillant_ebus import sensor, binary_sensor, number, selec
 E="entry"
 add("sensor", lambda: [sensor.VaillantSensor(coord,E,d) for d in sensor.SENSORS] + [sensor.ScheduleSensor(coord,E,c,n) for c,n in spec.TIMER_CIRCUITS.items()] + [sensor.HolidaySensor(coord,E)])
 add("oil", lambda: [oil.OilUsageSensor(coord,E,"oil_used_hc","x","hc"), oil.BurnerRuntimeSensor(coord,E,"burner_fine_hc","x","hc"), oil.NozzleFlowNumber(coord,E)])
+bw = oil.BurnerWindow("hc")
+add("burner24", lambda: [oil.BurnerStartsWindowSensor(coord,E,"burner_starts_24h_hc","x",bw), oil.BurnerRuntimeWindowSensor(coord,E,"burner_runtime_24h_hc","y",bw)])
 add("binary", lambda: [binary_sensor.VaillantBinary(coord,E,d) for d in binary_sensor.BINARIES])
 add("number", lambda: [number.VaillantNumber(coord,E,d) for d in number.NUMBERS])
 add("select", lambda: [select.VaillantModeSelect(coord,E,m) for m in select.MODES] + [schedule_editor.ScheduleDaySelect(coord,E,c,n) for c,n in spec.TIMER_CIRCUITS.items()])
@@ -59,7 +61,7 @@ for e in ents:
         bad += 1; print(f"  FEHLER {name}: {type(ex).__name__}: {ex}"); traceback.print_exc(limit=2)
 print(f"\n{len(ents)} Entitaeten geprueft, {bad} Probleme")
 for e in ents:
-    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber","ShowerPauseSwitch","BurnerRuntimeSensor","OilUsageSensor","PresenceSwitch","PresenceDelayNumber","PresenceStatusSensor"):
+    if type(e).__name__ in ("NozzleFlowNumber","VaillantNumber","ScheduleSlotText","ScheduleSensor","ParallelChargingSwitch","VaillantModeSelect","ShowerSwitch","ShowerStatusSensor","ShowerNumber","ShowerPauseSwitch","BurnerRuntimeSensor","OilUsageSensor","BurnerStartsWindowSensor","BurnerRuntimeWindowSensor","PresenceSwitch","PresenceDelayNumber","PresenceStatusSensor"):
         e.hass = hass
         try: print(f"  {type(e).__name__:22} {e.unique_id[-28:]:28} -> {e.state!r}")
         except Exception as ex: print("  ", type(e).__name__, "state fehlt:", ex)

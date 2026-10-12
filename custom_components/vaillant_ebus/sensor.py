@@ -19,7 +19,13 @@ from homeassistant.util import dt as dt_util
 from . import VaillantConfigEntry
 from .entity import VaillantEntity
 from .mixer import PipeSpreadSensor
-from .oil import BurnerRuntimeSensor, OilUsageSensor
+from .oil import (
+    BurnerRuntimeSensor,
+    BurnerRuntimeWindowSensor,
+    BurnerStartsWindowSensor,
+    BurnerWindow,
+    OilUsageSensor,
+)
 from .presence import PresenceStatusSensor
 from .shower import ShowerStatusSensor
 from .spec import DAYS, TIMER_CIRCUITS
@@ -90,6 +96,12 @@ async def async_setup_entry(
         BurnerRuntimeSensor(coordinator, entry.entry_id, "burner_fine_hc", "Brennerlaufzeit Heizen (genau)", "hc"),
         BurnerRuntimeSensor(coordinator, entry.entry_id, "burner_fine_hwc", "Brennerlaufzeit Warmwasser (genau)", "hwc"),
     ]
+    for cat, label in (("hc", "Heizen"), ("hwc", "Warmwasser")):
+        win = BurnerWindow(cat)
+        entities += [
+            BurnerStartsWindowSensor(coordinator, entry.entry_id, f"burner_starts_24h_{cat}", f"Brennerstarts {label} 24 h", win),
+            BurnerRuntimeWindowSensor(coordinator, entry.entry_id, f"burner_runtime_24h_{cat}", f"Brennerlaufzeit {label} 24 h", win),
+        ]
     entities.append(PipeSpreadSensor(coordinator, entry.entry_id))
     async_add_entities(entities)
 
