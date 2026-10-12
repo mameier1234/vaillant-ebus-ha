@@ -57,7 +57,7 @@ ITEMS: dict[str, Item] = {
     "party_active": Item("mc", "IsInParty", numeric=False),
     "holiday_active": Item("mc", "IsInHoliday", numeric=False),
     # Betriebsarten (immer frisch, sonst stale direkt nach dem Schreiben)
-    "season": Item("mc", "OperatingMode", fresh=True, numeric=False),
+    "season": Item("mc", "Mode", idx=1, fresh=True, numeric=False),
     "hwc_mode": Item("hwc", "Mode", idx=1, fresh=True, numeric=False),
     "circulation_mode": Item("cc", "Mode", idx=1, fresh=True, numeric=False),
     # Heizkreis-Parameter (mc Params = Display B5/C2)
