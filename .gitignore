@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 *.zip
+
+# Private Messdaten (RoomMind-Exporte): nicht ins oeffentliche Repo
+Daten/
+Memory/
